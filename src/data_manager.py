@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from operator import itemgetter
+from tabulate import tabulate, SEPARATING_LINE
 from .utils import *
 from .database_manager import *
 
@@ -28,21 +29,31 @@ def read_data(parsed_args, connection, cursor):
                 # Game
                 if parsed_args["insert_choice"] == "game" and file_name.lower().endswith(".csv"):
                     file = parsed_args["insert_filepath"] + str(file_name)
+                    print("READING: " + file)
                     read_game_data_csv(file, connection, cursor)
+                    print("")
 
                 # Activity
                 elif parsed_args["insert_choice"] == "bucket" and file_name.lower().endswith(".json"):
                     file = parsed_args["insert_filepath"] + str(file_name)
+                    print("READING: " + file)
                     read_bucket_data_json(file, connection, cursor)
+                    print("")
+            
+            print("Insertion complete!")
 
         elif is_path == 1:
             # Game
             if parsed_args["insert_choice"] == "game" and parsed_args["insert_filepath"].lower().endswith(".csv"):
+                print("READING: " + parsed_args["insert_filepath"])
                 read_game_data_csv(parsed_args["insert_filepath"], connection, cursor)
+                print("Insertion complete!")
 
             # Activity
             elif parsed_args["insert_choice"] == "bucket" and parsed_args["insert_filepath"].lower().endswith(".json"):
+                print("READING: " + parsed_args["insert_filepath"])
                 read_bucket_data_json(parsed_args["insert_filepath"], connection, cursor)
+                print("Insertion complete!")
 
             # Error
             else:
@@ -126,6 +137,7 @@ def read_game_data_csv(path, connection, cursor):
 # Read the list of activities from the buckets produced by ActivityWatch and add them to the sql database
 def read_bucket_data_json(path, connection, cursor):
 
+    act_event_counter = 0
     disc_counter = 0
     activities = []
     a_ins = {}
@@ -152,10 +164,17 @@ def read_bucket_data_json(path, connection, cursor):
 
         # Extract the content of the bucket
         bucket_content = data["buckets"][bucket]["events"]
-
+        
         # Cycle through the events
         for event in bucket_content:
-            result = is_event_relevant(event["data"]["app"], games)
+            
+            try:
+                result = is_event_relevant(event["data"]["app"], games)
+
+            except KeyError as ke:
+                # When "app" or "title" do not exist, probably, it is because the .json is linked to the afk watcher
+                print("WARNING: application's data is not present in the source file provided!\nAborting JSON parsing...")
+                return
 
             if result != 0 and event["duration"] > 0:
                 # Sometime the microseconds disappear
@@ -174,7 +193,6 @@ def read_bucket_data_json(path, connection, cursor):
                 
     # Sort for better compute different activities
     activities = sorted(activities, key=itemgetter("game_id", "datetime"))
-    print("Act length: " + str(len(activities)))
     for i in range(len(activities)):
 
         event = activities[i]
@@ -187,20 +205,23 @@ def read_bucket_data_json(path, connection, cursor):
         # discrepancy between the two start times. Store the past one and start collecting
         # information on the new data
         elif a_ins["game_id"] != event["game_id"] or ((event["datetime"] - prev_end_time) > different_activities_threshold):
-            disc_counter += insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor)
+            disc_counter += insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor) * act_event_counter
+            act_event_counter = 0
             a_ins = dict(event)
 
         else:
             a_ins["playtime"] += event["playtime"]
 
+        act_event_counter += 1
         prev_end_time = event["datetime"] + timedelta(0, event["playtime"])
 
         # Last element has to be saved no matter what it is
         if i == len(activities) - 1:
-            disc_counter += insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor)
+            disc_counter += insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor) * act_event_counter
+            act_event_counter = 0
 
     if disc_counter > 0:
-        print("WARNING: " + str(disc_counter) + " have been discarded for being duplicates...")
+        print("WARNING: " + str(disc_counter) + " out of " + str(len(activities)) + " events have been discarded for being duplicates...")
 
     # When everything goes well, commit the changes
     connection.commit()
@@ -224,49 +245,133 @@ def is_event_relevant(event_name, game_list):
 # Interpretation layer for the PRINT mode
 def print_data(parsed_args, connection, cursor):
 
-    launch_date = datetime.now()
+    group_dates = parsed_args["print_daily"] or parsed_args["print_monthly"]
+    query, args, headers = print_query_definition(args=parsed_args)
+
+    if args:
+        cursor.execute(query, args)
+    else:
+        cursor.execute(query)
+
+    info = cursor.fetchall()
+    print_data_cli(headers=headers, rows=info, group_dates=group_dates)
+
+
+def print_query_definition(args):
+
+    flag_verbose = args["print_verbose"]
+    flag_daily = args["print_daily"]
+    flag_monthly = args["print_monthly"]
+    flag_total = args["print_total"] 
+    dates = args["date_print_default"]
+    gids = args["id_print"]
+    gname = args["name_print"]
+
+    temp_conditions = ""
     print_query = ""
     query_args = None
-
-    # Select what data to print
+    headers = ["game_id", "game_name"]
+    
+    # SELECT
     # If verbose is selected, more info taken from Game table
-    if parsed_args["print_verbose"]:
+    if flag_verbose:
         print_query += "SELECT Game.*, "
+        headers += ["game_exe", "game_status", "game_mult", "game_plat"]
     else:
         print_query += "SELECT Game.id, Game.display_name, "
 
-    print_query += "SUM(Activity.playtime) "
+    # If daily is selected, the day has to be printed
+    if flag_daily:
+        print_query += "strftime('%Y-%m-%d', Activity.date) as rel_day, SUM(Activity.playtime) as total_playtime "
+        headers += ["day"]
+    # If monthly is selected, the month has to be printed
+    elif flag_monthly:
+        print_query += "strftime('%Y-%m', Activity.date) as rel_month, SUM(Activity.playtime) as total_playtime "
+        headers += ["month"]
+    else:
+        print_query += "SUM(Activity.playtime) as total_playtime "
+    
+    headers += ["playtime (HH:MM:SS)"]
     print_query += "FROM Game, Activity "
+
+    # WHERE
     print_query += "WHERE Game.id == Activity.game_id "
 
     # If total is requested, date filter is not needed
-    if not parsed_args["print_total"]:
+    if not flag_total:
         print_query += "AND date(Activity.date, 'localtime') >= ? "
 
         # Date can also be unspecified
-        if parsed_args["date_print_default"]:
-            if len(parsed_args["date_print_default"]) == 2:
-                print_query += "AND date(Activity.date, 'local') <= ? "
-                query_args = (parsed_args["date_print_default"][0], parsed_args["date_print_default"][1])
+        if dates:
+            if len(dates) == 2:
+                print_query += "AND date(Activity.date, 'localtime') <= ? "
+                query_args = (dates[0], dates[1], )
 
             else:
-                query_args = (parsed_args["date_print_default"][0])
+                query_args = (dates[0], )
         
         else:
             start_year = datetime.strftime(datetime(datetime.now().year, 1, 1), "%Y-%m-%d")
             query_args = (start_year, )
+    
+    # Manage game IDs
+    if gids:
+        for i in range(len(gids)):
+            temp_conditions += "Game.id == " + str(gids[i]) + " "
 
-    if parsed_args["print_verbose"]:
-        print_query += "GROUP BY Game.id "
-    else:
-        print_query += "GROUP BY Game.id, Game.display_name "
+            if i < len(gids) - 1:
+                temp_conditions += "OR "
+            
+        print_query += "AND (" + temp_conditions + ") "
 
-    if parsed_args["print_monthly"]:
-        print_query += ",   strftime('%m', Activitity.date) "
+    # Manage game name search
+    if gname:
+        print_query += "AND Game.display_name LIKE '%" + gname + "%' "
 
-    print(print_query)
-    print(query_args)
+    # GROUP BY
+    # game_id is unique, should be enough for differentiating games
+    print_query += "GROUP BY Game.id "
 
-    cursor.execute(print_query, query_args)
-    info = cursor.fetchall()
-    print(info)
+    if flag_daily:
+        print_query += ", rel_day "
+    elif flag_monthly:
+        print_query += ", rel_month "
+
+    # ORDER BY
+    print_query += "ORDER BY "
+
+    if flag_daily:
+        print_query += "rel_day DESC, "
+    elif flag_monthly:
+        print_query += "rel_month DESC, "
+
+    print_query += "total_playtime DESC"
+    return [print_query, query_args, headers]
+
+
+def print_data_cli(headers, rows, group_dates):
+
+    ins_barriers = 0
+    barriers = []
+    
+    # Convert playtimes into HH:MM form
+    for i in range(len(rows)):
+        #print(rows[i])
+        tmp_tuple = list(rows[i])
+
+        min, sec = divmod(tmp_tuple[-1], 60)
+        h, min = divmod(min, 60)
+        tmp_tuple[-1] = "{hours:02d}:{minutes:02d}:{seconds:02d}".format(hours=int(h), minutes=int(min), seconds=int(sec))
+        rows[i] = tmp_tuple
+
+        if group_dates and i < (len(rows) - 1) and rows[i][-2] != rows[i+1][-2]:
+            barriers.append(i+1)
+
+    # Add barriers
+    for i in range(len(barriers)):
+        rows.insert(barriers[i] + ins_barriers, ("", ))
+        ins_barriers += 1
+
+    # Print information table
+    print(tabulate(rows, headers=headers, tablefmt="fancy_outline"))
+

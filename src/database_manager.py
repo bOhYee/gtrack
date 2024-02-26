@@ -1,10 +1,5 @@
-import json
-import time
-import os
-from datetime import datetime as dt
-from dateutil.tz import tzlocal
-
 import sqlite3
+from datetime import datetime as dt
 from sqlite3 import Error
 
 
@@ -56,3 +51,4 @@ def insert_activity(gid, dt, playtime, cursor):
                   VALUES (?, ?, ?) """
 
     cursor.execute(i_query, i_data)
+    return 0

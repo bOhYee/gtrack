@@ -56,20 +56,29 @@ def parse_arguments(params):
     exclusive_group.add_argument("-m", "--manual", dest="insert_manual_flag", action="store_true", help="Indicates that the data will be given by the user")
 
     # Print options
-    parser_print = subparser.add_parser(ProgramModes.PRINT.value, help="Print the game or activity lists. By default, it prints the list of game and relative total playtime.")
+    print_usage = "GameTracker print [-h] [-v] [-t | [[-d SDATE [EDATE]] [-dd] [-mm]] [-gid [GID ...] | -gname GNAME]"
+    parser_print = subparser.add_parser(ProgramModes.PRINT.value, usage=print_usage, help="Print the game or activity lists. By default, it prints the list of game and relative total playtime.")
+    exclusive_print_group_01 = parser_print.add_mutually_exclusive_group()
+    exclusive_print_group_02 = parser_print.add_mutually_exclusive_group()
+
     parser_print.add_argument("-d", "--date", dest="date_print_default", metavar="DATE", nargs="+", action=DateProcessor, type=parse_date, help="Start and eventual end dates for computing total playtime")
-    parser_print.add_argument("-m", dest="print_monthly", action="store_true", help="Print the informations as a total computed month by month")
+    exclusive_print_group_01.add_argument("-dd", "--daily", dest="print_daily", action="store_true", help="Print the information as a total computed day by day")
+    exclusive_print_group_02.add_argument("-gid", dest="id_print", metavar="GID", nargs="+", help="Print the information related to the specified game IDs")
+    exclusive_print_group_02.add_argument("-gname", dest="name_print", metavar="GNAME", help="Print the information related to the specified game name")
+    exclusive_print_group_01.add_argument("-mm", "--monthly", dest="print_monthly", action="store_true", help="Print the information as a total computed month by month")
     parser_print.add_argument("-t", "--total", dest="print_total", action="store_true", help="Print total playtime for all games present in the database")
-    parser_print.add_argument("-v", "--show-moreinfo", dest="print_verbose", action="store_true", help="Print more informations about the game list")
+    parser_print.add_argument("-v", "--show-moreinfo", dest="print_verbose", action="store_true", help="Print more information about the game list")
 
     try:
-        res = vars(parser.parse_args(params))        
-        print(res)
+        res = vars(parser.parse_args(params))
+        if res["mode"] == "print" and res["print_total"] and (res["date_print_default"] or res["print_daily"] or res["print_monthly"]):
+            print("usage: " + print_usage)
+            print("error: GameTracker print: error: argument -t/--total: not allowed with argument -d/--date or -dd/--daily or -mm/--monthly")
+            exit(-1)
 
     except ArgumentTypeError as e:
-        print("usage: GameTracker print [-h] [-d DATE [DATE ...]]")
+        print("usage: " + print_usage)
         print("error: " + str(e))
-        print("Closing the program...")
         exit(-1)
 
     return res
