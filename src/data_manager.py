@@ -22,6 +22,16 @@ def read_data(parsed_args, connection, cursor):
         is_dir = os.path.isdir(parsed_args["insert_filepath"])
         is_path = os.path.isfile(parsed_args["insert_filepath"])
 
+        # Obtain game names
+        s_query = "SELECT id, executable_name FROM Game"
+        cursor.execute(s_query)
+        games = cursor.fetchall()
+
+        # Useless to process the JSON file if no game has been inserted beforehand
+        if parsed_args["insert_choice"] == "bucket" and not games:
+            err = "ERROR: no game has been found!\nAborting bucket processing..."
+            return err
+
         if is_dir == 1:
             input_files = os.listdir(parsed_args["insert_filepath"])
 
@@ -29,82 +39,98 @@ def read_data(parsed_args, connection, cursor):
                 # Game
                 if parsed_args["insert_choice"] == "game" and file_name.lower().endswith(".csv"):
                     file = parsed_args["insert_filepath"] + str(file_name)
-                    print("READING: " + file)
-                    read_game_data_csv(file, connection, cursor)
+                    open_data_file(file, 0, parsed_args["header_flag"], None, connection, cursor)
                     print("")
 
                 # Activity
                 elif parsed_args["insert_choice"] == "bucket" and file_name.lower().endswith(".json"):
                     file = parsed_args["insert_filepath"] + str(file_name)
-                    print("READING: " + file)
-                    read_bucket_data_json(file, connection, cursor)
+                    open_data_file(file, 1, None, games, connection, cursor)
                     print("")
-            
+
             print("Insertion complete!")
 
         elif is_path == 1:
             # Game
             if parsed_args["insert_choice"] == "game" and parsed_args["insert_filepath"].lower().endswith(".csv"):
-                print("READING: " + parsed_args["insert_filepath"])
-                read_game_data_csv(parsed_args["insert_filepath"], connection, cursor)
-                print("Insertion complete!")
+                open_data_file(parsed_args["insert_filepath"], 0, parsed_args["header_flag"], None, connection, cursor)
 
             # Activity
             elif parsed_args["insert_choice"] == "bucket" and parsed_args["insert_filepath"].lower().endswith(".json"):
-                print("READING: " + parsed_args["insert_filepath"])
-                read_bucket_data_json(parsed_args["insert_filepath"], connection, cursor)
-                print("Insertion complete!")
+                open_data_file(parsed_args["insert_filepath"], 1, None, games, connection, cursor)
 
             # Error
             else:
-                err = "Error: the indicated file cannot be used for adding/updating new " + parsed_args["insert_choice"] + "s!"    
+                err = "ERROR: the indicated file cannot be used for adding/updating new " + parsed_args["insert_choice"] + "s!"    
 
         else:
-            err = "Error: the indicated path is not correct!"
+            err = "ERROR: the indicated path is not correct!"
 
     return err
 
 
+# Checks for possible errors while opening the file and launches the correct module
+def open_data_file(file_name, file_type, header_flag, game_list, connection, cursor):
+
+    try:
+        input_file = open(file_name)
+    except OSError:
+        print("ERROR: file " + file_name + " couldn't be opened/read!")
+        return 1
+
+    print("READING: " + file_name)
+    with input_file:
+        if file_type == 0:
+            read_game_data_csv(input_file, header_flag, connection, cursor)
+        else:
+            read_bucket_data_json(input_file, game_list, connection, cursor)
+
+    return 0
+
+
 # Read the list of games from a .csv file and add them to the sql database
-def read_game_data_csv(path, connection, cursor):
+def read_game_data_csv(input_stream, header_flag, connection, cursor):
 
     counter = 0                 # Counter to skip first line
     disc_counter = 0            # Discarded line counter
-    input_file = open(path)     # Input file stream
 
-    for line in csv.DictReader(input_file, FIELDNAMES):
-
-        # Skip first line
-        if counter == 0:
+    for line in csv.DictReader(input_stream, FIELDNAMES):
+        # Skip first line when the header of the .csv file is present
+        if not header_flag and counter == 0:
             counter += 1
             continue
         
-        name = ""
-        exe_name = ""
+        name = None
+        exe_name = None
         status = ""
         flag_mult = 0
         flag_plat = 0
 
-        # Value conditioning
-        name = line["display_name"].strip() if line["display_name"].strip() != "" else None
-        status = line["status"].strip() if line["status"].strip() != "" else None
-        exe_name = line["executable_name"].strip().lower() if line["executable_name"].strip() != "" else None
+        # Value conditioning:
+        # Mandatory
+        if line["display_name"]:
+            name = line["display_name"].strip() if line["display_name"].strip() != "" else None
 
-        if line["multiplayer"].strip() == "":
-            flag_mult = None
+        if line["executable_name"]:
+            exe_name = line["executable_name"].strip().lower() if line["executable_name"].strip() != "" else None
 
+        # Optional
+        if line["status"]:
+            status = line["status"].strip() if line["status"].strip() != "" else ""
+
+        if not line["multiplayer"] or line["multiplayer"].strip() == "":
+            flag_mult = 0
         elif line["multiplayer"].strip().upper() == "Y":
             flag_mult = 1
         
-        if line["plat"].strip() == "":
-            flag_plat = None
-
-        elif line["plat"].strip().upper()  == "Y":
+        if not line["plat"] or line["plat"].strip() == "":
+            flag_plat = 0
+        elif line["plat"].strip().upper() == "Y":
             flag_plat = 1
 
         # When some of the values are incorrect or empty, print a WARNING message
         # Not a fatal error, can skip to the follow-up ones
-        if (name is None) or (status is None) or (exe_name is None) or (flag_mult is None) or (flag_plat is None):
+        if (name is None) or (exe_name is None):
             print("WARNING: line " + str(counter+1) + " contains some unexpected values! It will be discarded.")
             disc_counter += 1
             counter += 1
@@ -131,11 +157,11 @@ def read_game_data_csv(path, connection, cursor):
     connection.commit()
 
     if disc_counter > 0:
-        print("WARNING: " + str(disc_counter) + " lines have been discarded for unexpected values encountered! Please check the input file.")
+        print("\nWARNING: " + str(disc_counter) + " lines have been discarded for unexpected values encountered! Please check the input file.")
             
 
 # Read the list of activities from the buckets produced by ActivityWatch and add them to the sql database
-def read_bucket_data_json(path, connection, cursor):
+def read_bucket_data_json(input_stream, games, connection, cursor):
 
     act_event_counter = 0
     disc_counter = 0
@@ -145,56 +171,45 @@ def read_bucket_data_json(path, connection, cursor):
     datetime_event_format = "%Y-%m-%dT%H:%M:%S.%f%z"
     datetime_event_nomicro_format = "%Y-%m-%dT%H:%M:%S%z"
     different_activities_threshold = timedelta(seconds=DIFF_ACT_THRESHOLD)
+    data = json.load(input_stream)
 
-    file = open(path, "r", encoding="UTF-8")
-    data = json.load(file)
+    try:
+        # Cycle between different buckets
+        for bucket in data["buckets"]:
 
-    # Obtain game names
-    s_query = "SELECT id, executable_name FROM Game"
-    cursor.execute(s_query)
-    games = cursor.fetchall()
+            # Extract the content of the bucket
+            bucket_content = data["buckets"][bucket]["events"]
 
-    # Useless to process the JSON file if no game has been inserted beforehand
-    if not games:
-        print("WARNING: no game has been found!\nAborting JSON processing...")
-        return
-
-    # Cycle between different buckets
-    for bucket in data["buckets"]:
-
-        # Extract the content of the bucket
-        bucket_content = data["buckets"][bucket]["events"]
-        
-        # Cycle through the events
-        for event in bucket_content:
-            
-            try:
+            # Cycle through the events
+            for event in bucket_content:
                 result = is_event_relevant(event["data"]["app"], games)
 
-            except KeyError as ke:
-                # When "app" or "title" do not exist, probably, it is because the .json is linked to the afk watcher
-                print("WARNING: application's data is not present in the source file provided!\nAborting JSON parsing...")
-                return
+                if event["duration"] and result != 0 and event["duration"] > 0:
+                    # Sometimes the microseconds disappear
+                    try:
+                        event_dt = datetime.strptime(event["timestamp"], datetime_event_format)
+                    except ValueError as date_err:
+                        event_dt = datetime.strptime(event["timestamp"], datetime_event_nomicro_format)
 
-            if result != 0 and event["duration"] > 0:
-                # Sometime the microseconds disappear
-                try:
-                    event_dt = datetime.strptime(event["timestamp"], datetime_event_format)
-                except ValueError as date_err:
-                    event_dt = datetime.strptime(event["timestamp"], datetime_event_nomicro_format)
+                    a = {
+                        "game_id": result,
+                        "datetime": event_dt,
+                        "playtime": float(event["duration"])
+                    }
 
-                a = {
-                    "game_id": result,
-                    "datetime": event_dt,
-                    "playtime": float(event["duration"])
-                }
+                    activities.append(a)
 
-                activities.append(a)
+    except TypeError as te:
+        print("WARNING: some key dictionary couldn't be found inside the provided .json file!\nAborting file processing...")
+        return
+
+    except KeyError as ke:
+        print("WARNING: key " + str(ke) + " couldn't be found inside the provided .json file!\nAborting file processing...")
+        return
                 
     # Sort for better compute different activities
     activities = sorted(activities, key=itemgetter("game_id", "datetime"))
     for i in range(len(activities)):
-
         event = activities[i]
 
         # Need to duplicate the event when starting the cycle

@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import datetime as dt
 from sqlite3 import Error
+from .utils import *
 
 
 # Database location path
@@ -35,6 +36,11 @@ def create_tables(cursor):
 def insert_activity(gid, dt, playtime, cursor):
 
     playtime = round(playtime, 3)
+
+    # Playtime should be above a certain threshold
+    # In this way, meaningless events are avoided and not taken into account for the counts
+    if playtime <= SAVE_ACT_THRESHOLD:
+        return 1
 
     # Verify that the data doesn't exist
     search_query = """ SELECT COUNT(*)
