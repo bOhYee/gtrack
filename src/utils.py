@@ -2,7 +2,7 @@ import argparse
 from enum import Enum
 
 # Time threshold for saving an activity inside the DB
-SAVE_ACT_THRESHOLD = 5 * 60
+SAVE_ACT_THRESHOLD = 3 * 60
 
 # Time threshold for identifying different gaming sessions
 # Value is in SECONDS for better scalability
