@@ -50,7 +50,7 @@ def insert_activity(gid, dt, playtime, cursor):
     search_data = (gid, dt)
     cursor.execute(search_query, search_data)
     if cursor.fetchone()[0] == 1:
-        return 1
+        return 2
     
     i_data = (gid, dt, playtime)
     i_query = """ INSERT INTO Activity (game_id, date, playtime)

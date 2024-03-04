@@ -178,13 +178,15 @@ def read_game_data_csv(input_stream, header_flag, connection, cursor):
 # Read the list of activities from the buckets produced by ActivityWatch and add them to the sql database
 def read_bucket_data_json(input_stream, games, connection, cursor):
     act_event_counter = 0
-    disc_counter = 0
+    uthres_counter = 0
+    dup_counter = 0
     activities = []
     a_ins = {}
     prev_end_time = 0
     datetime_event_format = "%Y-%m-%dT%H:%M:%S.%f%z"
     datetime_event_nomicro_format = "%Y-%m-%dT%H:%M:%S%z"
     different_activities_threshold = timedelta(seconds=DIFF_ACT_THRESHOLD)
+
     try: 
         data = json.load(input_stream)
     except JSONDecodeError as je:
@@ -238,7 +240,12 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
         # discrepancy between the two start times. Store the past one and start collecting
         # information on the new data
         elif a_ins["game_id"] != event["game_id"] or ((event["datetime"] - prev_end_time) > different_activities_threshold):
-            disc_counter += insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor) * act_event_counter
+            ins_res = insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor)
+            if ins_res == 1:
+                uthres_counter += act_event_counter
+            elif ins_res == 2:
+                dup_counter += act_event_counter
+
             act_event_counter = 0
             a_ins = dict(event)
 
@@ -250,11 +257,19 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
 
         # Last element has to be saved no matter what it is
         if i == len(activities) - 1:
-            disc_counter += insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor) * act_event_counter
+            ins_res = insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor)
+            if ins_res == 1:
+                uthres_counter += act_event_counter
+            elif ins_res == 2:
+                dup_counter += act_event_counter
+
             act_event_counter = 0
 
-    if disc_counter > 0:
-        print("WARNING: " + str(disc_counter) + " out of " + str(len(activities)) + " events have been discarded for being duplicates...")
+    if uthres_counter > 0:
+        print("WARNING: " + str(uthres_counter) + " out of " + str(len(activities)) + " events have been discarded for being low time activities...")
+
+    if dup_counter > 0:
+        print("WARNING: " + str(dup_counter) + " out of " + str(len(activities)) + " events have been discarded for being duplicates...")
 
     # When everything goes well, commit the changes
     connection.commit()
