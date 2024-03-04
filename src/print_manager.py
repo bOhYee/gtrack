@@ -1,5 +1,5 @@
 from datetime import datetime
-from tabulate import tabulate, SEPARATING_LINE
+from tabulate import tabulate
 
 from .utils import *
 from .database_manager import *

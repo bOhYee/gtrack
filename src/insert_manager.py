@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+from json import JSONDecodeError
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -47,7 +48,7 @@ def insert_from_file(parsed_args, connection, cursor):
 
     # Useless to process the JSON file if no game has been inserted beforehand
     if parsed_args["insert_choice"] == "bucket" and not games:
-        err = "ERROR: no game has been found!\nAborting bucket processing..."
+        err = "ERROR: no game has been found! Buckets will not be processed..."
         return err
 
     if is_dir == 1:
@@ -58,13 +59,11 @@ def insert_from_file(parsed_args, connection, cursor):
             if parsed_args["insert_choice"] == "game" and file_name.lower().endswith(".csv"):
                 file = parsed_args["insert_filepath"] + str(file_name)
                 open_data_file(file, 0, parsed_args["header_flag"], None, connection, cursor)
-                print("")
 
             # Activity
             elif parsed_args["insert_choice"] == "bucket" and file_name.lower().endswith(".json"):
                 file = parsed_args["insert_filepath"] + str(file_name)
                 open_data_file(file, 1, None, games, connection, cursor)
-                print("")
 
         print("Insertion complete!")
 
@@ -79,8 +78,7 @@ def insert_from_file(parsed_args, connection, cursor):
 
         # Error
         else:
-            err = "ERROR: the indicated file cannot be used for adding/updating new " + parsed_args[
-                "insert_choice"] + "s!"
+            err = "ERROR: the indicated file cannot be used for adding/updating " + parsed_args["insert_choice"] + "s!"
 
     else:
         err = "ERROR: the indicated path is not correct!"
@@ -96,7 +94,7 @@ def open_data_file(file_name, file_type, header_flag, game_list, connection, cur
         print("ERROR: file " + file_name + " couldn't be opened/read!")
         return 1
 
-    print("READING: " + file_name)
+    print("Reading: " + file_name)
     with input_file:
         if file_type == 0:
             read_game_data_csv(input_file, header_flag, connection, cursor)
@@ -174,8 +172,7 @@ def read_game_data_csv(input_stream, header_flag, connection, cursor):
     connection.commit()
 
     if disc_counter > 0:
-        print("\nWARNING: " + str(
-            disc_counter) + " lines have been discarded for unexpected values encountered! Please check the input file.")
+        print("\nWARNING: " + str(disc_counter) + " lines have been discarded for unexpected values encountered! Please check the input file.")
 
 
 # Read the list of activities from the buckets produced by ActivityWatch and add them to the sql database
@@ -188,7 +185,11 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
     datetime_event_format = "%Y-%m-%dT%H:%M:%S.%f%z"
     datetime_event_nomicro_format = "%Y-%m-%dT%H:%M:%S%z"
     different_activities_threshold = timedelta(seconds=DIFF_ACT_THRESHOLD)
-    data = json.load(input_stream)
+    try: 
+        data = json.load(input_stream)
+    except JSONDecodeError as je:
+        print("ERROR: json file could not be decoded due to:" + str(je))
+        return
 
     try:
         # Cycle between different buckets
@@ -217,13 +218,11 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
                     activities.append(a)
 
     except TypeError as te:
-        print(
-            "WARNING: some key dictionary couldn't be found inside the provided .json file!\nAborting file processing...")
+        print("ERROR: some key dictionary couldn't be found inside the provided json file! Aborting file processing...")
         return
 
     except KeyError as ke:
-        print("WARNING: key " + str(
-            ke) + " couldn't be found inside the provided .json file!\nAborting file processing...")
+        print("ERROR: key " + str(ke) + " couldn't be found inside the provided json file! Aborting file processing...")
         return
 
     # Sort for better compute different activities
@@ -275,12 +274,10 @@ def is_event_relevant(event_name, game_list):
     return 0
 
 
-# 
+# Function that performs checks before creating template files
 def create_template_file(parsed_args):
     err = None
-    selected_type = 0                               # Selected TYPE: 1-game; 2-bucket
-    default_csv_template_name = "template.csv"
-    default_json_template_name = "template.json"
+    selected_type = 0  # Selected TYPE: 1-game; 2-bucket
     
     # Check if user indicated a simple file or a directory of source files
     is_path = os.path.isfile(parsed_args["insert_filepath"])
@@ -288,10 +285,10 @@ def create_template_file(parsed_args):
     selected_type = 1 if parsed_args["insert_choice"] == "game" else 2
 
     if not((file_basename.endswith(".csv") and selected_type == 1) or (file_basename.endswith(".json") and selected_type == 2)):
-        err = "ERROR: the indicated path is not correct!\nPlease provide a path to a .csv or .json file to save the template data."
+        err = "ERROR: the indicated path is not correct! Please provide a path to a csv or json file to save the template data."
 
     elif is_path == 1:
-        print("The indicated file already exists!")
+        print("WARNING: the indicated file already exists.")
         cli_answer = input("Do you want to overwrite it? (y/n) ").lower()
         
         if not(cli_answer == "y"):
@@ -305,6 +302,7 @@ def create_template_file(parsed_args):
     return err
 
 
+# Creation of the template file last check on file opening
 def open_template_file(file_name, sel_type):
     err = None
 
@@ -316,14 +314,16 @@ def open_template_file(file_name, sel_type):
                 create_bucket_template(template)
     
     except PermissionError as pe:
-        err = str(pe)
+        err = "ERROR: not authorized to write the template file on the indicated path!"
     
     except OSError as oe:
-        err = str(oe)
+        err = "ERROR: could not open file due to: " + str(oe)
 
     return err
 
 
+# Creation of the csv template
+# Two example lines are provided to better understand field values
 def create_game_template(file_name):
 
     fields = list(FIELDNAMES)    
@@ -336,6 +336,8 @@ def create_game_template(file_name):
     return
 
 
+# Creation of the json template
+# Two example lines are provided to better understand field values
 def create_bucket_template(file_name):
 
     # Definition of two examples to put inside the template
