@@ -1,5 +1,5 @@
 # gtrack - Game tracker
-The goal is to filter and organize game's information, provided by the [ActivityWatch](https://github.com/ActivityWatch/activitywatch) time tracker, through an easy-to-use CLI application. After receiving the game's information, the print process allows to quickly obtain playtime's data for specific applications and specific time intervals. 
+The goal is to filter and organize game's information, provided by the [ActivityWatch](https://github.com/ActivityWatch/activitywatch) time tracker, through an easy-to-use CLI application. After receiving the game's information, the print process allows to quickly obtain playtime's data for specific applications and specific time intervals.
 
 ## Usage
 Every bit of information will be stored on a **SQLite** database, stored locally. No network communication will be performed by the program.
@@ -28,3 +28,9 @@ $ gtrack print -v
 # To print the total playtime of a single process for a specific time interval
 $ gtrack print -gid GAME_ID -d START_DATE [END_DATE]
 ```
+
+## Missing features
+The program still misses some key features and requires some constraints to be satisfied in order to work properly:
+- in the same location where the program will be executed, a `data` folder is required to store the database;
+- configuration files for indicating DB or data locations automatically;
+- once a game is inserted, no method is available to remove it other than deleting the database itself and recreating it.
