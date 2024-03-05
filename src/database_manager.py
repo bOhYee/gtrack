@@ -15,9 +15,9 @@ def create_tables(cursor):
                         id INTEGER PRIMARY KEY,
                         display_name VARCHAR(50) NOT NULL,
                         executable_name VARCHAR(50) NOT NULL,
-                        status INT NOT NULL,
-                        is_multiplayer INT NOT NULL,
-                        has_platinum INT NOT NULL
+                        status VARCHAR(50),
+                        is_multiplayer INT,
+                        has_platinum INT
                     ) """
     
     query_activity = """ CREATE TABLE IF NOT EXISTS Activity (

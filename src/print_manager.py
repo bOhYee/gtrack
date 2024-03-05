@@ -16,9 +16,10 @@ def print_data(parsed_args, connection, cursor):
         cursor.execute(query)
 
     info = cursor.fetchall()
-    print_data_cli(headers=headers, rows=info, group_dates=group_dates)
+    print_data_cli(headers=headers, rows=info, flag_verbose=parsed_args["print_verbose"], group_dates=group_dates)
 
 
+# Query defintion for recovering data from the DB
 def print_query_definition(args):
     flag_verbose = args["print_verbose"]
     flag_daily = args["print_daily"]
@@ -36,30 +37,39 @@ def print_query_definition(args):
     # SELECT
     # If verbose is selected, more info taken from Game table
     if flag_verbose:
-        print_query += "SELECT Game.*, "
+        print_query += "SELECT Game.* "
         headers += ["game_exe", "game_status", "game_mult", "game_plat"]
     else:
         print_query += "SELECT Game.id, Game.display_name, "
 
-    # If daily is selected, the day has to be printed
-    if flag_daily:
-        print_query += "strftime('%Y-%m-%d', Activity.date) as rel_day, SUM(Activity.playtime) as total_playtime "
-        headers += ["day"]
-    # If monthly is selected, the month has to be printed
-    elif flag_monthly:
-        print_query += "strftime('%Y-%m', Activity.date) as rel_month, SUM(Activity.playtime) as total_playtime "
-        headers += ["month"]
-    else:
-        print_query += "SUM(Activity.playtime) as total_playtime "
+        # If daily is selected, the day has to be printed
+        if flag_daily:
+            print_query += "strftime('%Y-%m-%d', Activity.date) as rel_day, "
+            headers += ["day"]
+        # If monthly is selected, the month has to be printed
+        elif flag_monthly:
+            print_query += "strftime('%Y-%m', Activity.date) as rel_month, "
+            headers += ["month"]
 
-    headers += ["playtime (HH:MM:SS)"]
-    print_query += "FROM Game, Activity "
+        print_query += "SUM(Activity.playtime) as total_playtime "
+        headers += ["playtime (HH:MM:SS)"]
+
+    # FROM
+    # When verbose, Activity table is not used
+    if flag_verbose:
+        print_query += "FROM Game "
+    else:
+        print_query += "FROM Game, Activity "
 
     # WHERE
-    print_query += "WHERE Game.id == Activity.game_id "
+    if flag_verbose:
+        # Useless check, only for simplicity in adding more controls
+        print_query += "WHERE Game.id > 0 "
+    else:
+        print_query += "WHERE Game.id == Activity.game_id "   
 
     # If total is requested, date filter is not needed
-    if not flag_total:
+    if not flag_verbose and not flag_total:
         print_query += "AND date(Activity.date, 'localtime') >= ? "
 
         # Date can also be unspecified
@@ -99,31 +109,33 @@ def print_query_definition(args):
         print_query += ", rel_month "
 
     # ORDER BY
-    print_query += "ORDER BY "
+    if not flag_verbose:
+        print_query += "ORDER BY "
 
-    if flag_daily:
-        print_query += "rel_day DESC, "
-    elif flag_monthly:
-        print_query += "rel_month DESC, "
+        if flag_daily:
+            print_query += "rel_day DESC, "
+        elif flag_monthly:
+            print_query += "rel_month DESC, "
 
-    print_query += "total_playtime DESC"
+        print_query += "total_playtime DESC"
+    
     return [print_query, query_args, headers]
 
 
-def print_data_cli(headers, rows, group_dates):
+# Table printing on CLI
+def print_data_cli(headers, rows, flag_verbose, group_dates):
     ins_barriers = 0
     barriers = []
 
     # Convert playtimes into HH:MM form
     for i in range(len(rows)):
-        # print(rows[i])
         tmp_tuple = list(rows[i])
 
-        min, sec = divmod(tmp_tuple[-1], 60)
-        h, min = divmod(min, 60)
-        tmp_tuple[-1] = "{hours:02d}:{minutes:02d}:{seconds:02d}".format(hours=int(h), minutes=int(min),
-                                                                         seconds=int(sec))
-        rows[i] = tmp_tuple
+        if not flag_verbose:
+            min, sec = divmod(tmp_tuple[-1], 60)
+            h, min = divmod(min, 60)
+            tmp_tuple[-1] = "{hours:02d}:{minutes:02d}:{seconds:02d}".format(hours=int(h), minutes=int(min), seconds=int(sec))
+            rows[i] = tmp_tuple
 
         if group_dates and i < (len(rows) - 1) and rows[i][-2] != rows[i + 1][-2]:
             barriers.append(i + 1)

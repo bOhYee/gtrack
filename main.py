@@ -44,12 +44,13 @@ def main():
 # Parses the arguments received by the program
 def parse_arguments(params):
 
+    app_name = "gtrack"
     desc = "A simple python program to parse ActivityWatch data for keeping track of time spent on games."
-    parser = argparse.ArgumentParser(prog="GameTracker", description=desc)
+    parser = argparse.ArgumentParser(prog=app_name, description=desc)
     subparser = parser.add_subparsers(dest="mode", required=True, help="'subcommand' help")
 
     # Insert options
-    insert_usage = "GameTracker insert -t TYPE [-h] (-f FILE  [--create-template | --no-header] | -m)"
+    insert_usage = app_name + " insert -t TYPE [-h] (-f FILE  [--create-template | --no-header] | -m)"
     parser_ins = subparser.add_parser(ProgramModes.INSERT.value, usage=insert_usage, help="Acquire new games or activities to the database from command-line or .csv/.json files")
     exclusive_group = parser_ins.add_mutually_exclusive_group(required=True)
     parser_ins.add_argument("--create-template", dest="template_flag", action="store_true", help="Create a template for custom insertion of the selected TYPE")
@@ -59,7 +60,7 @@ def parse_arguments(params):
     parser_ins.add_argument("-t", "--type", dest="insert_choice", metavar="TYPE", choices=["game", "bucket"], help="Data type to insert between ['game' | 'bucket']", required=True)
 
     # Print options
-    print_usage = "GameTracker print [-h] [-v] [-t | [[-d SDATE [EDATE]] [-dd] [-mm]] [-gid [GID ...] | -gname GNAME]"
+    print_usage = app_name + " print [-h] [-v] [-t | [[-d SDATE [EDATE]] [-dd] [-mm]] [-gid [GID ...] | -gname GNAME]"
     parser_print = subparser.add_parser(ProgramModes.PRINT.value, usage=print_usage, help="Print the game or activity lists. By default, it prints the list of game and relative total playtime.")
     exclusive_print_group_01 = parser_print.add_mutually_exclusive_group()
     exclusive_print_group_02 = parser_print.add_mutually_exclusive_group()
@@ -74,19 +75,24 @@ def parse_arguments(params):
 
     try:
         res = vars(parser.parse_args(params))
+        if res["mode"] == "insert" and res["insert_manual_flag"] and res["insert_choice"] == "bucket":
+            print("usage: " + insert_usage)
+            print("error: " + app_name + " print: error: manual search enabled only games")
+            exit(-1)
+
         if res["mode"] == "insert" and res["insert_manual_flag"] and (res["template_flag"] or res["header_flag"]):
             print("usage: " + insert_usage)
-            print("error: GameTracker print: error: argument --no-header/--create-template: not allowed with argument -m/--manual")
+            print("error: " + app_name + " print: error: argument --no-header/--create-template: not allowed with argument -m/--manual")
             exit(-1)
 
         if res["mode"] == "insert" and res["insert_filepath"] and res["template_flag"] and res["header_flag"]:
             print("usage: " + insert_usage)
-            print("error: GameTracker print: error: argument --create-template: not allowed with argument --no-header")
+            print("error: " + app_name + " print: error: argument --create-template: not allowed with argument --no-header")
             exit(-1)
 
         if res["mode"] == "print" and res["print_total"] and (res["date_print_default"] or res["print_daily"] or res["print_monthly"]):
             print("usage: " + print_usage)
-            print("error: GameTracker print: error: argument -t/--total: not allowed with argument -d/--date or -dd/--daily or -mm/--monthly")
+            print("error: " + app_name + " rint: error: argument -t/--total: not allowed with argument -d/--date or -dd/--daily or -mm/--monthly")
             exit(-1)
 
     except ArgumentTypeError as e:

@@ -16,7 +16,7 @@ def insert_data(parsed_args, connection, cursor):
     err = None
 
     if parsed_args["insert_manual_flag"] == 1:
-        insert_from_cli()
+        err = insert_from_cli(connection, cursor)
 
     elif parsed_args["insert_filepath"] and parsed_args["template_flag"] == 1:
         err = create_template_file(parsed_args)
@@ -28,9 +28,56 @@ def insert_data(parsed_args, connection, cursor):
 
 
 # Retrieve data to add to the Game table from CLI instead of a file
-def insert_from_cli():
-    print("Manual insertion to be implemented!")
+def insert_from_cli(connection, cursor):
+    err = None
+    flag_mult = 0
+    flag_plat = 0
 
+    # Take data from CLI input
+    print("Provide the game's information to store")
+    display_name = input("Name to be displayed: ").strip()
+    exec_name = input("Name of the executable: ").strip()
+    status = input("(opt) Status of the game: ").strip()
+    mult = input("(opt) Multiplayer game (y/n): ").strip().lower()
+    plat = input("(opt) Platinum obtained (y/n): ").strip().lower()
+
+    if display_name == "" or exec_name == "":
+        err = "ERROR: display name and executable name have to be defined!"
+        return err
+
+    if mult == "y":
+        flag_mult = 1
+
+    if plat == "y":
+        flag_plat = 1
+
+    # Check if entry already exist, based on the executable name, since it theoretically cannot change
+    # In case it exists, UPDATE the row, otherwise INSERT a new row
+    sel_data = (exec_name, )
+    sel_query = """ SELECT COUNT(*) FROM Game WHERE executable_name = ? """
+
+    u_data = (display_name, status, flag_mult, flag_plat, exec_name)
+    u_query = """ UPDATE Game 
+                SET display_name = ?, status = ?, is_multiplayer = ?, has_platinum = ? 
+                WHERE executable_name = ? """
+
+    i_data = (display_name, exec_name, status, flag_mult, flag_plat)
+    i_query = """ INSERT INTO Game (display_name, executable_name, status, is_multiplayer, has_platinum)
+                VALUES (?, ?, ?, ?, ?) """
+
+    cursor.execute(sel_query, sel_data)
+    if cursor.fetchone()[0] > 0:
+        print("WARNING: game already exists.")
+        ans = input("Do you want to update the entry? (y/n) ").strip().lower()
+
+        if ans == "y":
+            cursor.execute(u_query, u_data)
+
+    else:
+        cursor.execute(i_query, i_data)
+
+    connection.commit()
+    return err
 
 # Determine which method has to be launched for reading file
 # Additional controls for eventual errors during execution
