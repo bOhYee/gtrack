@@ -6,8 +6,8 @@ import datetime
 from sqlite3 import Error
 from argparse import ArgumentTypeError
 from src.utils import *
-from src.insert_manager import *
-from src.print_manager import *
+from .insert_manager import *
+from .print_manager import *
 
 
 # Main program
