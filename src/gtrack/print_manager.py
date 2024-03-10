@@ -1,8 +1,6 @@
 from datetime import datetime
 from tabulate import tabulate
-
-from .utils import *
-from .database_manager import *
+from gtrack import utils
 
 
 # Interpretation layer for the PRINT mode

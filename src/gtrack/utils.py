@@ -1,6 +1,9 @@
 import argparse
 from enum import Enum
 
+# Database default location path
+DB_PATH = "../data/project.db"
+
 # Time threshold for saving an activity inside the DB
 SAVE_ACT_THRESHOLD = 3 * 60
 

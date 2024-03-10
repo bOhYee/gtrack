@@ -1,24 +1,22 @@
 import sys
 import argparse
-import sqlite3
 import datetime
+import sqlite3
 
-from sqlite3 import Error
-from argparse import ArgumentTypeError
-from src.utils import *
-from .insert_manager import *
-from .print_manager import *
-
+from gtrack import utils
+from gtrack.insert_manager import insert_data
+from gtrack.print_manager import print_data
 
 # Main program
 def main():
+    res = None
 
     # Connect to the sqlite3 database and check for the existance of the tables
     try:
-        connection = sqlite3.connect(DB_PATH)
+        connection = sqlite3.connect(utils.DB_PATH)
         cursor = connection.cursor()
 
-    except Error as e:
+    except sqlite3.Error as e:
         print("Error received while establishing the connection: " + str(e))
         exit(-1)
 
@@ -27,18 +25,41 @@ def main():
     # Parse arguments received by the program
     parsed_args = parse_arguments(sys.argv[1:])
 
-    res = None
-    if parsed_args["mode"] == ProgramModes.INSERT.value:
+    if parsed_args["mode"] == utils.ProgramModes.INSERT.value:
         res = insert_data(parsed_args, connection, cursor)
         if res is not None:
             print(res)
             exit(-1)
 
-    elif parsed_args["mode"] == ProgramModes.PRINT.value:
+    elif parsed_args["mode"] == utils.ProgramModes.PRINT.value:
         print_data(parsed_args, connection, cursor)
 
     # Close connection
     connection.close()
+
+
+# Creates the tables 'game' and 'activity' inside the database if they aren't alread present
+def create_tables(cursor):
+
+    query_game = """ CREATE TABLE IF NOT EXISTS Game (
+                        id INTEGER PRIMARY KEY,
+                        display_name VARCHAR(50) NOT NULL,
+                        executable_name VARCHAR(50) NOT NULL,
+                        status VARCHAR(50),
+                        is_multiplayer INT,
+                        has_platinum INT
+                    ) """
+    
+    query_activity = """ CREATE TABLE IF NOT EXISTS Activity (
+                            game_id INT NOT NULL,
+                            date DATETIME NOT NULL,
+                            playtime FLOAT NOT NULL,
+                            PRIMARY KEY (game_id, date)
+                            FOREIGN KEY (game_id) REFERENCES game(id)
+                    ) """
+    
+    cursor.execute(query_game)
+    cursor.execute(query_activity)
 
 
 # Parses the arguments received by the program
@@ -51,7 +72,7 @@ def parse_arguments(params):
 
     # Insert options
     insert_usage = app_name + " insert -t TYPE [-h] (-f FILE  [--create-template | --no-header] | -m)"
-    parser_ins = subparser.add_parser(ProgramModes.INSERT.value, usage=insert_usage, help="Acquire new games or activities to the database from command-line or .csv/.json files")
+    parser_ins = subparser.add_parser(utils.ProgramModes.INSERT.value, usage=insert_usage, help="Acquire new games or activities to the database from command-line or .csv/.json files")
     exclusive_group = parser_ins.add_mutually_exclusive_group(required=True)
     parser_ins.add_argument("--create-template", dest="template_flag", action="store_true", help="Create a template for custom insertion of the selected TYPE")
     exclusive_group.add_argument("-f", "--file", dest="insert_filepath", metavar="FILE", help="File to read from or directory containing source files")
@@ -61,11 +82,11 @@ def parse_arguments(params):
 
     # Print options
     print_usage = app_name + " print [-h] [-v] [-t | [[-d SDATE [EDATE]] [-dd] [-mm]] [-gid [GID ...] | -gname GNAME]"
-    parser_print = subparser.add_parser(ProgramModes.PRINT.value, usage=print_usage, help="Print the game or activity lists. By default, it prints the list of game and relative total playtime.")
+    parser_print = subparser.add_parser(utils.ProgramModes.PRINT.value, usage=print_usage, help="Print the game or activity lists. By default, it prints the list of game and relative total playtime.")
     exclusive_print_group_01 = parser_print.add_mutually_exclusive_group()
     exclusive_print_group_02 = parser_print.add_mutually_exclusive_group()
 
-    parser_print.add_argument("-d", "--date", dest="date_print_default", metavar="DATE", nargs="+", action=DateProcessor, type=parse_date, help="Start and eventual end dates for computing total playtime")
+    parser_print.add_argument("-d", "--date", dest="date_print_default", metavar="DATE", nargs="+", action=utils.DateProcessor, type=parse_date, help="Start and eventual end dates for computing total playtime")
     exclusive_print_group_01.add_argument("-dd", "--daily", dest="print_daily", action="store_true", help="Print the information as a total computed day by day")
     exclusive_print_group_02.add_argument("-gid", dest="id_print", metavar="GID", nargs="+", help="Print the information related to the specified game IDs")
     exclusive_print_group_02.add_argument("-gname", dest="name_print", metavar="GNAME", help="Print the information related to the specified game name")
@@ -95,7 +116,7 @@ def parse_arguments(params):
             print("error: " + app_name + " rint: error: argument -t/--total: not allowed with argument -d/--date or -dd/--daily or -mm/--monthly")
             exit(-1)
 
-    except ArgumentTypeError as e:
+    except argparse.ArgumentTypeError as e:
         print("usage: " + print_usage)
         print("error: " + str(e))
         exit(-1)

@@ -4,11 +4,8 @@ import os
 from json import JSONDecodeError
 from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
 from operator import itemgetter
-
-from .utils import *
-from .database_manager import *
+from gtrack import utils
 
 
 # Interpretation layer for the INSERT mode
@@ -156,7 +153,7 @@ def read_game_data_csv(input_stream, header_flag, connection, cursor):
     counter = 0  # Counter to skip first line
     disc_counter = 0  # Discarded line counter
 
-    for line in csv.DictReader(input_stream, FIELDNAMES):
+    for line in csv.DictReader(input_stream, utils.FIELDNAMES):
         # Skip first line when the header of the .csv file is present
         if not header_flag and counter == 0:
             counter += 1
@@ -232,7 +229,7 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
     prev_end_time = 0
     datetime_event_format = "%Y-%m-%dT%H:%M:%S.%f%z"
     datetime_event_nomicro_format = "%Y-%m-%dT%H:%M:%S%z"
-    different_activities_threshold = timedelta(seconds=DIFF_ACT_THRESHOLD)
+    different_activities_threshold = timedelta(seconds=utils.DIFF_ACT_THRESHOLD)
 
     try: 
         data = json.load(input_stream)
@@ -322,6 +319,34 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
     connection.commit()
 
 
+# Inserts an activity, pre-elaborated from the bucket, inside the table
+def insert_activity(gid, dt, playtime, cursor):
+
+    playtime = round(playtime, 3)
+
+    # Playtime should be above a certain threshold
+    # In this way, meaningless events are avoided and not taken into account for the counts
+    if playtime <= utils.SAVE_ACT_THRESHOLD:
+        return 1
+
+    # Verify that the data doesn't exist
+    search_query = """ SELECT COUNT(*)
+                       FROM Activity
+                       WHERE game_id = ? AND date = ? """
+    
+    search_data = (gid, dt)
+    cursor.execute(search_query, search_data)
+    if cursor.fetchone()[0] == 1:
+        return 2
+    
+    i_data = (gid, dt, playtime)
+    i_query = """ INSERT INTO Activity (game_id, date, playtime)
+                  VALUES (?, ?, ?) """
+
+    cursor.execute(i_query, i_data)
+    return 0
+
+
 # Check if the event is related to a game
 # Returns 0 if not relevant, otherwise returns the game id
 def is_event_relevant(event_name, game_list):
@@ -388,7 +413,7 @@ def open_template_file(file_name, sel_type):
 # Two example lines are provided to better understand field values
 def create_game_template(file_name):
 
-    fields = list(FIELDNAMES)    
+    fields = list(utils.FIELDNAMES)    
     rows = [{fields[0]: "Lethal company", fields[1]: "Lethal Company.exe", fields[2]: "A", fields[3]: "Y", fields[4]: "N"},
             {fields[0]: "Rocket League", fields[1]: "RocketLeague.exe", fields[2]: "F", fields[3]: "Y", fields[4]: "Y"}]
 
