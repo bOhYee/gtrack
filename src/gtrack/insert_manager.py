@@ -216,7 +216,7 @@ def read_game_data_csv(input_stream, header_flag, connection, cursor):
     connection.commit()
 
     if disc_counter > 0:
-        print("\nWARNING: " + str(disc_counter) + " lines have been discarded for unexpected values encountered! Please check the input file.")
+        print("WARNING: " + str(disc_counter) + " lines have been discarded for unexpected values encountered! Please check the input file.")
 
 
 # Read the list of activities from the buckets produced by ActivityWatch and add them to the sql database
@@ -453,3 +453,36 @@ def create_bucket_template(file_name):
 
     file_name.write(json_obj)
     return
+
+
+# Preparation layer for the SCAN mode
+def scan_data(paths, connection, cursor):
+    err = None
+    pargs = {}
+
+    # No path indicated
+    if paths[0] is None and paths[1] is None:
+        print("The configuration file does not specify a path. The operation will be terminated.")
+        return
+
+    # Insert games first
+    if paths[0] is not None:
+        print("Scanning game folder: " + paths[0])
+        pargs["insert_filepath"] = paths[0]
+        pargs["insert_choice"] = "game"
+        pargs["header_flag"] = 0
+        err = insert_from_file(pargs, connection, cursor)
+        if err:
+            return err
+        
+        print("")
+
+    # Insert buckets
+    if paths[1] is not None:
+        pargs = {}
+        pargs["insert_filepath"] = paths[1]
+        pargs["insert_choice"] = "bucket"
+        print("Scanning bucket folder: " + paths[1])
+        err = insert_from_file(pargs, connection, cursor)
+
+    return err
