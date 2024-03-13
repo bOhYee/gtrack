@@ -6,7 +6,7 @@ All of the data provided to the program will be stored on a **SQLite** database,
 ## Usage
 The program reads the required information from **game list** and **bucket** files. The list of games has to be specified through a .csv file and has to contain properties of the application such as the name used for display and plotting and the executable name to link it to the tracking information. The full list of columns can be retrieved through the `--create-template` option. The buckets are files used to retrieve time data about processes. They are .json file that can be directly obtained through [ActivityWatch](https://github.com/ActivityWatch/activitywatch) or can be crafted for custom insertions. The `--create-template` option can be used to create a .json structure to aid in manually adding time data.
 
-The location of the database is read from a configuration file, which has to be created and positioned inside the home directory of the user (`$HOME` or `%userprofile%`), thus avoiding an additional argument at every launch of the program. Two optional paths can be added to indicate the folders where game lists and buckets will be found. An example of the configuration file's content can be:
+The location of the database is read from a configuration file, which has to be created and positioned inside a `.gtrack` folder in the home directory of the user (`$HOME/.gtrack/config.ini` or `%userprofile%/.gtrack/config.ini`), thus avoiding an additional argument at every launch of the program. Two optional paths can be added to indicate the folders where game lists and buckets will be found. An example of the configuration file's content can be:
 ```
 [Paths]
 path_db = /path/to/the/database/file
