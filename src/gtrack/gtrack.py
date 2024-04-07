@@ -6,7 +6,7 @@ import configparser
 
 from pathlib import Path
 from gtrack import utils
-from gtrack.insert_manager import insert_data, scan_data
+from gtrack.insert_manager import insert_data, scan_data, remove_data
 from gtrack.print_manager import print_data
 
 # Main program
@@ -43,6 +43,9 @@ def main():
         if res is not None:
             print(res)
             exit(-1)
+
+    elif parsed_args["mode"] == utils.ProgramModes.REMOVE.value:
+        remove_data(parsed_args["GID"], connection, cursor)
 
     elif parsed_args["mode"] == utils.ProgramModes.PRINT.value:
         print_data(parsed_args, connection, cursor)
@@ -122,6 +125,10 @@ def parse_arguments(params):
 
     # Scan options
     parser_scan = subparser.add_parser(utils.ProgramModes.SCAN.value, help="Scan the paths indicated inside the configuration file for rapidly inserting/updating game and bucket's entries")
+
+    # Remove options
+    parser_rm = subparser.add_parser(utils.ProgramModes.REMOVE.value, help="Remove games from the database based on their ID")
+    parser_rm.add_argument("GID", type=int, help="Game ID of the game to be removed")
 
     # Print options
     print_usage = app_name + " print [-h] [-v] [-t | [[-d SDATE [EDATE]] [-dd] [-mm]] [-gid [GID ...] | -gname GNAME]"

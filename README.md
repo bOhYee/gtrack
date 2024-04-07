@@ -19,10 +19,10 @@ path_data_bucket = /path/to/the/bucket/folder  # optional
 To manually provide the program with a new list of processes to track or with a new bucket, the `insert` command can be used:
 ```
 # To add a list of applications to the database
-$ gtrack insert -t game -f /path/to/the/list
+$ gtrack add -t game -f /path/to/the/list
 
 # To add a new bucket with tracking information to the database
-$ gtrack insert -t bucket -f /path/to/the/bucket
+$ gtrack add -t bucket -f /path/to/the/bucket
 ```
 
 To automatically search for new information to add in the folders specified inside the configuration file, the `scan` command can be used:
@@ -44,7 +44,7 @@ $ gtrack print -gid GAME_ID -d START_DATE [END_DATE]
 ```
 
 ## To-Do
-- [ ] Add a `remove` option for games (currently, deleting and recreating the database is the only way to remove unwanted processes);
+- [x] ~~Add a `remove` option for games (currently, deleting and recreating the database is the only way to remove unwanted processes);~~
 - [ ] Add more meaningful flags for games (for better filtering/plotting);
 - [ ] Allow more print options;
 - [ ] Plotting for statistics.

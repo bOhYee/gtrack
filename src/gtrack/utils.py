@@ -18,8 +18,9 @@ FIELDNAMES = ("display_name", "executable_name", "status", "multiplayer", "plat"
 # Program modalities
 # Each one is associated to a different type of execution
 class ProgramModes(Enum):
-    INSERT  = "insert"       # Insert new data inside the tables from a .csv/.json file or from CLI
+    INSERT  = "add"          # Insert new data inside the tables from a .csv/.json file or from CLI
     SCAN    = "scan"         # Scan the paths contained in the .ini file to add new data
+    REMOVE  = "rm"           # Remove unwanted processes from the database
     PRINT   = "print"        # Print filtered data from the tables
     PLOT    = "plot"         # Plot data depending on user needs
 

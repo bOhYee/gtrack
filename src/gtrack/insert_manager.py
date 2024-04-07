@@ -486,3 +486,20 @@ def scan_data(paths, connection, cursor):
         err = insert_from_file(pargs, connection, cursor)
 
     return err
+
+
+# Remove operation on the database
+# A game and all of its activities are removed based on its ID (GID)
+def remove_data(gid, connection, cursor):
+
+    rm_data = (gid,)
+    remove_act_query = """ DELETE FROM Activity
+                           WHERE game_id = ? """
+    
+    remove_game_query = """ DELETE FROM Game
+                            WHERE id = ? """
+    
+    cursor.execute(remove_act_query, rm_data)
+    cursor.execute(remove_game_query, rm_data)
+    connection.commit()
+    return
