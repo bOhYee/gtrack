@@ -6,6 +6,7 @@ import configparser
 
 from pathlib import Path
 from gtrack import utils
+from gtrack.config_manager import config_data
 from gtrack.insert_manager import insert_data, scan_data, remove_data
 from gtrack.print_manager import print_data
 
@@ -32,23 +33,29 @@ def main():
     # Parse arguments received by the program
     parsed_args = parse_arguments(sys.argv[1:])
 
-    if parsed_args["mode"] == utils.ProgramModes.INSERT.value:
+    if parsed_args["mode"] == utils.ProgramModes.CONFIG.value:
+        res = config_data(parsed_args, connection, cursor)
+        if res is not None:
+            print(res)
+            exit(-1)
+    
+    elif parsed_args["mode"] == utils.ProgramModes.INSERT.value:
         res = insert_data(parsed_args, connection, cursor)
         if res is not None:
             print(res)
             exit(-1)
+    
+    elif parsed_args["mode"] == utils.ProgramModes.PRINT.value:
+        print_data(parsed_args, connection, cursor)
+
+    elif parsed_args["mode"] == utils.ProgramModes.REMOVE.value:
+        remove_data(parsed_args["GID"], connection, cursor)
 
     elif parsed_args["mode"] == utils.ProgramModes.SCAN.value:
         res = scan_data((dbpath[1], dbpath[2]), connection, cursor)
         if res is not None:
             print(res)
             exit(-1)
-
-    elif parsed_args["mode"] == utils.ProgramModes.REMOVE.value:
-        remove_data(parsed_args["GID"], connection, cursor)
-
-    elif parsed_args["mode"] == utils.ProgramModes.PRINT.value:
-        print_data(parsed_args, connection, cursor)
 
     # Close connection
     connection.close()
@@ -87,21 +94,34 @@ def create_tables(cursor):
     query_game = """ CREATE TABLE IF NOT EXISTS Game (
                         id INTEGER PRIMARY KEY,
                         display_name VARCHAR(50) NOT NULL,
-                        executable_name VARCHAR(50) NOT NULL,
-                        status VARCHAR(50),
-                        is_multiplayer INT,
-                        has_platinum INT
+                        executable_name VARCHAR(50) NOT NULL
+                ) """
+    
+    query_flags = """ CREATE TABLE IF NOT EXISTS Flag (
+                        id INTEGER PRIMARY KEY,
+                        name VARCHAR(50) NOT NULL
+                ) """
+    
+    query_rel_flags= """ CREATE TABLE IF NOT EXISTS HasFlag (
+                            game_id INT NOT NULL,
+                            flag_id INT NOT NULL,
+                            value INT NOT NULL,
+                            PRIMARY KEY (game_id, flag_id)
+                            FOREIGN KEY (game_id) REFERENCES Game(id),
+                            FOREIGN KEY (flag_id) REFERENCES Flag(id)
                     ) """
     
     query_activity = """ CREATE TABLE IF NOT EXISTS Activity (
                             game_id INT NOT NULL,
                             date DATETIME NOT NULL,
                             playtime FLOAT NOT NULL,
-                            PRIMARY KEY (game_id, date)
-                            FOREIGN KEY (game_id) REFERENCES game(id)
+                            PRIMARY KEY (game_id, date),
+                            FOREIGN KEY (game_id) REFERENCES Game(id)
                     ) """
     
     cursor.execute(query_game)
+    cursor.execute(query_flags)
+    cursor.execute(query_rel_flags)
     cursor.execute(query_activity)
 
 
@@ -112,6 +132,13 @@ def parse_arguments(params):
     desc = "A simple python program to parse ActivityWatch data for keeping track of time spent on games."
     parser = argparse.ArgumentParser(prog=app_name, description=desc)
     subparser = parser.add_subparsers(dest="mode", required=True, help="'subcommand' help")
+
+    # Config options
+    parser_config = subparser.add_parser(utils.ProgramModes.CONFIG.value, help="Configure flags for precise filtering on added games")
+    exclusive_config_group = parser_config.add_mutually_exclusive_group()
+    exclusive_config_group.add_argument("--add", dest="config_add", metavar="FLAG_NAME", help="Add a new flag option")
+    exclusive_config_group.add_argument("--list", dest="config_list", action="store_true", help="List all flag options")
+    exclusive_config_group.add_argument("--rm", dest="config_rm", metavar="FLAG_ID", type=int, help="Remove a new flag option")
 
     # Insert options
     insert_usage = app_name + " insert -t TYPE [-h] (-f FILE  [--create-template | --no-header] | -m)"
@@ -138,7 +165,7 @@ def parse_arguments(params):
 
     parser_print.add_argument("-d", "--date", dest="date_print_default", metavar="DATE", nargs="+", action=utils.DateProcessor, type=parse_date, help="Dates to constrain the computations")
     exclusive_print_group_01.add_argument("-dd", "--daily", dest="print_daily", action="store_true", help="Total time spent on each game as a total per day")
-    exclusive_print_group_02.add_argument("-gid", dest="id_print", metavar="GID", nargs="+", help="Filter the information to the specified game IDs")
+    exclusive_print_group_02.add_argument("-gid", dest="id_print", type=int, metavar="GID", nargs="+", help="Filter the information to the specified game IDs")
     exclusive_print_group_02.add_argument("-gname", dest="name_print", metavar="GNAME", help="Filter the information to the specified game name")
     exclusive_print_group_01.add_argument("-mm", "--monthly", dest="print_monthly", action="store_true", help="Total time spent on each game as a total per month")
     parser_print.add_argument("-t", "--total", dest="print_total", action="store_true", help="Total time spent on each game. No constraint can be applied when adopting this flag")

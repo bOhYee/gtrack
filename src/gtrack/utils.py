@@ -12,17 +12,18 @@ SAVE_ACT_THRESHOLD = 3 * 60
 DIFF_ACT_THRESHOLD = 30 * 60
 
 # Field names of the CSV file for the game table
-FIELDNAMES = ("display_name", "executable_name", "status", "multiplayer", "plat")
+FIELDNAMES = ("display_name", "executable_name")
 
 
 # Program modalities
 # Each one is associated to a different type of execution
 class ProgramModes(Enum):
+    CONFIG  = "config"       # Configure the game flags
     INSERT  = "add"          # Insert new data inside the tables from a .csv/.json file or from CLI
-    SCAN    = "scan"         # Scan the paths contained in the .ini file to add new data
-    REMOVE  = "rm"           # Remove unwanted processes from the database
-    PRINT   = "print"        # Print filtered data from the tables
     PLOT    = "plot"         # Plot data depending on user needs
+    PRINT   = "print"        # Print filtered data from the tables
+    REMOVE  = "rm"           # Remove unwanted processes from the database
+    SCAN    = "scan"         # Scan the paths contained in the .ini file to add new data
 
 
 # For argparse usage
