@@ -27,8 +27,8 @@ def add_flag(flag_name, connection, cursor):
     query_data = (flag_name, )
     cursor.execute(duplicates_query, query_data)
 
-    if cursor.rowcount >= 1:
-        err = "ERROR: flag could not be added due to being already present"
+    if len(cursor.fetchall()) >= 1:
+        err = "WARNING: flag " + str(flag_name) + " could not be added due to being already present"
     else:
         # Insert option flag
         insert_query = "INSERT INTO Flag (name) VALUES (?)"
@@ -78,4 +78,20 @@ def remove_flag(flag_id, connection, cursor):
     cursor.execute(rm_query_hf, data)
     cursor.execute(rm_query_flag, data)
     connection.commit()
+    return
+
+
+# Scan layer for flags insertion
+def scan_flags(filters, connection, cursor):
+
+    if filters is not None:
+        flag_list = filters.split(",")
+
+        print("Scanning flag list: " + str(flag_list))
+        for flag in flag_list:
+            if flag.strip() != "":
+                add_flag(flag.strip(), connection, cursor)
+
+        print("Insertion complete!\n")
+
     return

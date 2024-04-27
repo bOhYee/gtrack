@@ -150,10 +150,22 @@ def open_data_file(file_name, file_type, header_flag, game_list, connection, cur
 
 # Read the list of games from a .csv file and add them to the sql database
 def read_game_data_csv(input_stream, header_flag, connection, cursor):
-    counter = 0  # Counter to skip first line
+    counter = 0       # Counter to skip first line
     disc_counter = 0  # Discarded line counter
+    flag_list = []    # Flag list 
+    exe_list = []     # Executable list
+    option_list = []  # Options for parsable lines
 
-    for line in csv.DictReader(input_stream, utils.FIELDNAMES):
+    # Get the flag list to interpret the additional options in the .csv
+    flag_query = """ SELECT id
+                     FROM Flag 
+                     ORDER BY id ASC """
+
+    cursor.execute(flag_query)
+    flag_list = cursor.fetchall()
+
+    # Parse the .csv and insert games
+    for line in csv.DictReader(input_stream, utils.FIELDNAMES, restkey="flags"):
         # Skip first line when the header of the .csv file is present
         if not header_flag and counter == 0:
             counter += 1
@@ -161,9 +173,8 @@ def read_game_data_csv(input_stream, header_flag, connection, cursor):
 
         name = None
         exe_name = None
-        status = ""
-        flag_mult = 0
-        flag_plat = 0
+        options = []
+        flag_val = 0
 
         # Value conditioning:
         # Mandatory
@@ -173,20 +184,6 @@ def read_game_data_csv(input_stream, header_flag, connection, cursor):
         if line["executable_name"]:
             exe_name = line["executable_name"].strip().lower() if line["executable_name"].strip() != "" else None
 
-        # Optional
-        if line["status"]:
-            status = line["status"].strip() if line["status"].strip() != "" else ""
-
-        if not line["multiplayer"] or line["multiplayer"].strip() == "":
-            flag_mult = 0
-        elif line["multiplayer"].strip().upper() == "Y":
-            flag_mult = 1
-
-        if not line["plat"] or line["plat"].strip() == "":
-            flag_plat = 0
-        elif line["plat"].strip().upper() == "Y":
-            flag_plat = 1
-
         # When some of the values are incorrect or empty, print a WARNING message
         # Not a fatal error, can skip to the follow-up ones
         if (name is None) or (exe_name is None):
@@ -195,26 +192,77 @@ def read_game_data_csv(input_stream, header_flag, connection, cursor):
             counter += 1
             continue
 
+        # Optional
+        for flag in line["flags"]:
+            flag_val = 0
+
+            if flag.strip().upper() == "Y" or flag.strip().upper() == "1":
+                flag_val = 1
+
+            options += [flag_val]  
+        
+        if len(flag_list) > len(options):
+            print("WARNING: line " + str(counter + 1) + " does not contain values for all defined flags. The default value ('false') will be assigned.")
+            while (len(flag_list) - len(options)) > 0:
+                options += [0]
+
         # Check if entry already exist, based on the executable name, since it theoretically cannot change
         # In case it exists, UPDATE the row, otherwise INSERT a new row
-        u_data = (name, status, flag_mult, flag_plat, exe_name)
+        u_data = (name, exe_name)
         u_query = """ UPDATE Game
-                    SET display_name = ?, status = ?, is_multiplayer = ?, has_platinum = ?
-                    WHERE executable_name = ? """
+                      SET display_name = ?
+                      WHERE executable_name = ? """
 
-        i_data = (name, exe_name, status, flag_mult, flag_plat)
-        i_query = """ INSERT INTO Game (display_name, executable_name, status, is_multiplayer, has_platinum)
-                    VALUES (?, ?, ?, ?, ?) """
+        i_data = (name, exe_name)
+        i_query = """ INSERT INTO Game (display_name, executable_name)
+                      VALUES (?, ?) """
 
-        cursor.execute(u_query, u_data)
+        cursor.execute(u_query, u_data)        
         if cursor.rowcount < 1:
             cursor.execute(i_query, i_data)
 
         counter += 1
+        exe_list.append(exe_name)
+        option_list.append(options)
 
-    # When everything has been correctly parsed, commit
+    # Commit the changes to the Game table
     connection.commit()
 
+    # Insert the flags values
+    if (len(exe_list) != len(option_list)):
+        print("ERROR: cannot insert flag options due to some unexpected problem! Terminating program...")
+        return
+    
+    for i in range(len(exe_list)):
+        # For each game, retrieve its ID and make an insert inside the HasFlag table
+        exe_name = exe_list[i]
+        options = option_list[i]
+
+        s_data = (exe_name, )
+        s_query = """SELECT id
+                     FROM Game
+                     WHERE executable_name = ? """
+        
+        cursor.execute(s_query, s_data)
+        gid = cursor.fetchall()[0][0]
+
+        u_query = """ UPDATE HasFlag
+                      SET value = ?
+                      WHERE game_id = ? AND flag_id = ? """
+    
+        i_query = """INSERT INTO HasFlag (game_id, flag_id, value)
+                     VALUES (?, ?, ?) """
+        
+        for i in range(len(flag_list)):
+            u_data = (options[i], gid, flag_list[i][0])
+            i_data = (gid, flag_list[i][0], options[i])
+
+            cursor.execute(u_query, u_data)        
+            if cursor.rowcount < 1:
+                cursor.execute(i_query, i_data)
+
+    # Commit the changes to the HasFlag table
+    connection.commit()
     if disc_counter > 0:
         print("WARNING: " + str(disc_counter) + " lines have been discarded for unexpected values encountered! Please check the input file.")
 
@@ -466,7 +514,7 @@ def scan_data(paths, connection, cursor):
         return
 
     # Insert games first
-    if paths[0] is not None:
+    if paths[0] is not None and paths[0].strip() != "":
         print("Scanning game folder: " + paths[0])
         pargs["insert_filepath"] = paths[0]
         pargs["insert_choice"] = "game"
@@ -478,7 +526,7 @@ def scan_data(paths, connection, cursor):
         print("")
 
     # Insert buckets
-    if paths[1] is not None:
+    if paths[1] is not None and paths[1].strip() != "":
         pargs = {}
         pargs["insert_filepath"] = paths[1]
         pargs["insert_choice"] = "bucket"
@@ -496,10 +544,14 @@ def remove_data(gid, connection, cursor):
     remove_act_query = """ DELETE FROM Activity
                            WHERE game_id = ? """
     
+    remove_hf_query = """DELETE FROM HasFlag
+                         WHERE game_id = ? """
+    
     remove_game_query = """ DELETE FROM Game
                             WHERE id = ? """
     
     cursor.execute(remove_act_query, rm_data)
+    cursor.execute(remove_hf_query, rm_data)
     cursor.execute(remove_game_query, rm_data)
     connection.commit()
     return

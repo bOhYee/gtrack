@@ -6,7 +6,7 @@ import configparser
 
 from pathlib import Path
 from gtrack import utils
-from gtrack.config_manager import config_data
+from gtrack.config_manager import config_data, scan_flags
 from gtrack.insert_manager import insert_data, scan_data, remove_data
 from gtrack.print_manager import print_data
 
@@ -14,9 +14,12 @@ from gtrack.print_manager import print_data
 def main():
     res = None
     dbpath = None
+    filters = None
 
     # Read config file to know the DB location
-    dbpath = read_config_file()
+    configs = read_config_file()
+    dbpath = configs["Paths"]
+    filters = configs["Filters"]
 
     # Connect to the sqlite3 database and check for the existance of the tables
     # When the database is not found in the indicated directory, it is created
@@ -52,6 +55,7 @@ def main():
         remove_data(parsed_args["GID"], connection, cursor)
 
     elif parsed_args["mode"] == utils.ProgramModes.SCAN.value:
+        scan_flags(filters[0], connection, cursor)
         res = scan_data((dbpath[1], dbpath[2]), connection, cursor)
         if res is not None:
             print(res)
@@ -63,9 +67,10 @@ def main():
 
 # Read configuration file
 def read_config_file():
-    res = None
+    res = {}
     path_data_game = None
     path_data_bucket = None
+    flag_list = None
     config = configparser.ConfigParser()
 
     try:
@@ -75,8 +80,14 @@ def read_config_file():
 
         path_data_game = str(paths["path_data_game"]) if "path_data_game" in paths else None
         path_data_bucket = str(paths["path_data_bucket"]) if "path_data_bucket" in paths else None
-        res = (str(paths["path_db"]), path_data_game, path_data_bucket)
+        res["Paths"] = (str(paths["path_db"]), path_data_game, path_data_bucket)
 
+        # Filters is optional
+        if "Filters" in config:
+            flags = config["Filters"]
+            flag_list = str(flags["flag_list"]) if "flag_list" in flags else None
+            res["Filters"] = (flag_list, )
+ 
     except OSError:
         print("ERROR: configuration file could not be found")
         exit(-1)
