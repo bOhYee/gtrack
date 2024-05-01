@@ -14,12 +14,11 @@ DIFF_ACT_THRESHOLD = 30 * 60
 # Field names of the CSV file for the game table
 FIELDNAMES = ("display_name", "executable_name")
 
-
 # Program modalities
 # Each one is associated to a different type of execution
 class ProgramModes(Enum):
-    CONFIG  = "config"       # Configure the game flags
     INSERT  = "add"          # Insert new data inside the tables from a .csv/.json file or from CLI
+    FILTER  = "filter"       # Configure the game filters/flags
     PLOT    = "plot"         # Plot data depending on user needs
     PRINT   = "print"        # Print filtered data from the tables
     REMOVE  = "rm"           # Remove unwanted processes from the database

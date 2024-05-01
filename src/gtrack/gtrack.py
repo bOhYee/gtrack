@@ -6,7 +6,7 @@ import configparser
 
 from pathlib import Path
 from gtrack import utils
-from gtrack.config_manager import config_data, scan_flags
+from gtrack.filter_manager import config_flags, scan_flags
 from gtrack.insert_manager import insert_data, scan_data, remove_data
 from gtrack.print_manager import print_data
 
@@ -36,8 +36,8 @@ def main():
     # Parse arguments received by the program
     parsed_args = parse_arguments(sys.argv[1:])
 
-    if parsed_args["mode"] == utils.ProgramModes.CONFIG.value:
-        res = config_data(parsed_args, connection, cursor)
+    if parsed_args["mode"] == utils.ProgramModes.FILTER.value:
+        res = config_flags(parsed_args, connection, cursor)
         if res is not None:
             print(res)
             exit(-1)
@@ -144,13 +144,6 @@ def parse_arguments(params):
     parser = argparse.ArgumentParser(prog=app_name, description=desc)
     subparser = parser.add_subparsers(dest="mode", required=True, help="'subcommand' help")
 
-    # Config options
-    parser_config = subparser.add_parser(utils.ProgramModes.CONFIG.value, help="Configure flags for precise filtering on added games")
-    exclusive_config_group = parser_config.add_mutually_exclusive_group()
-    exclusive_config_group.add_argument("--add", dest="config_add", metavar="FLAG_NAME", help="Add a new flag option")
-    exclusive_config_group.add_argument("--list", dest="config_list", action="store_true", help="List all flag options")
-    exclusive_config_group.add_argument("--rm", dest="config_rm", metavar="FLAG_ID", type=int, help="Remove a new flag option")
-
     # Insert options
     insert_usage = app_name + " insert -t TYPE [-h] (-f FILE  [--create-template | --no-header] | -m)"
     parser_ins = subparser.add_parser(utils.ProgramModes.INSERT.value, usage=insert_usage, help="Provide new games or buckets to add to the database from command-line or .csv/.json files")
@@ -161,16 +154,16 @@ def parse_arguments(params):
     parser_ins.add_argument("--no-header", dest="header_flag", action="store_true", help="Don't skip any line while parsing the .csv file")
     parser_ins.add_argument("-t", "--type", dest="insert_choice", metavar="TYPE", choices=["game", "bucket"], help="Data type to insert between ['game' | 'bucket']", required=True)
 
-    # Scan options
-    parser_scan = subparser.add_parser(utils.ProgramModes.SCAN.value, help="Scan the paths indicated inside the configuration file for rapidly inserting/updating game and bucket's entries")
-
-    # Remove options
-    parser_rm = subparser.add_parser(utils.ProgramModes.REMOVE.value, help="Remove games from the database based on their ID")
-    parser_rm.add_argument("GID", type=int, help="Game ID of the game to be removed")
+    # Filter options
+    parser_config = subparser.add_parser(utils.ProgramModes.FILTER.value, help="Configure flags for filtering added games. These can only assume true/false values")
+    exclusive_config_group = parser_config.add_mutually_exclusive_group()
+    exclusive_config_group.add_argument("--add", dest="filter_add", metavar="FLAG_NAME", help="Add a new flag")
+    exclusive_config_group.add_argument("--list", dest="filter_list", action="store_true", help="List all flags")
+    exclusive_config_group.add_argument("--rm", dest="filter_rm", metavar="FLAG_ID", type=int, help="Remove a flag based on its ID")
 
     # Print options
     print_usage = app_name + " print [-h] [-v] [-t | [[-d SDATE [EDATE]] [-dd] [-mm]] [-gid [GID ...] | -gname GNAME]"
-    parser_print = subparser.add_parser(utils.ProgramModes.PRINT.value, usage=print_usage, help="Print time spent for provided games. By default, it prints the total playtimes for the current year")
+    parser_print = subparser.add_parser(utils.ProgramModes.PRINT.value, usage=print_usage, help="Print time spent for provided games. By default, it prints the total playtime of every game played during the current year")
     exclusive_print_group_01 = parser_print.add_mutually_exclusive_group()
     exclusive_print_group_02 = parser_print.add_mutually_exclusive_group()
 
@@ -181,6 +174,13 @@ def parse_arguments(params):
     exclusive_print_group_01.add_argument("-mm", "--monthly", dest="print_monthly", action="store_true", help="Total time spent on each game as a total per month")
     parser_print.add_argument("-t", "--total", dest="print_total", action="store_true", help="Total time spent on each game. No constraint can be applied when adopting this flag")
     parser_print.add_argument("-v", "--verbose", dest="print_verbose", action="store_true", help="Print additional information about each game. When adopting this flag, no total time is computed")
+
+    # Remove options
+    parser_rm = subparser.add_parser(utils.ProgramModes.REMOVE.value, help="Remove games from the database based on their ID")
+    parser_rm.add_argument("GID", type=int, help="Game ID of the game to be removed")
+
+    # Scan options
+    parser_scan = subparser.add_parser(utils.ProgramModes.SCAN.value, help="Scan the paths indicated inside the configuration file for rapidly inserting/updating game and bucket's entries")
 
     try:
         res = vars(parser.parse_args(params))

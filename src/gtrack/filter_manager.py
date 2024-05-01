@@ -1,18 +1,17 @@
 from tabulate import tabulate
 
-
 # Interpretation layer for the CONFIG command
-def config_data(parsed_args, connection, cursor):
+def config_flags(parsed_args, connection, cursor):
     err = None
 
-    if parsed_args["config_list"]:
+    if parsed_args["filter_list"]:
         list_flags(connection, cursor)
 
-    elif parsed_args["config_add"]:
-        err = add_flag(parsed_args["config_add"], connection, cursor)
+    elif parsed_args["filter_add"]:
+        err = add_flag(parsed_args["filter_add"], connection, cursor)
 
-    elif parsed_args["config_rm"]:
-        remove_flag(parsed_args["config_rm"], connection, cursor)
+    elif parsed_args["filter_rm"]:
+        remove_flag(parsed_args["filter_rm"], connection, cursor)
         
     return err
 
