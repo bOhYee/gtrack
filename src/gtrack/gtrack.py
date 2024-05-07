@@ -1,9 +1,9 @@
 import sys
 import argparse
-import datetime
 import sqlite3
 import configparser
 
+from datetime import datetime
 from pathlib import Path
 from gtrack import utils
 from gtrack.filter_manager import config_flags, scan_flags
@@ -167,12 +167,13 @@ def parse_arguments(params):
     exclusive_print_group_01 = parser_print.add_mutually_exclusive_group()
     exclusive_print_group_02 = parser_print.add_mutually_exclusive_group()
 
-    parser_print.add_argument("-d", "--date", dest="date_print_default", metavar="DATE", nargs="+", action=utils.DateProcessor, type=parse_date, help="Dates to constrain the computations")
+    parser_print.add_argument("-d", "--date", dest="date_print_default", metavar="DATE", nargs="+", action=utils.DateProcessor, type=parse_date, help="Dates to constrain the search period")
     exclusive_print_group_01.add_argument("-dd", "--daily", dest="print_daily", action="store_true", help="Total time spent on each game as a total per day")
+    parser_print.add_argument("-f", "--filter", dest="filter_print", type=int, metavar="FLAG_ID", nargs="+", help="Filter through the custom-defined flags")
     exclusive_print_group_02.add_argument("-gid", dest="id_print", type=int, metavar="GID", nargs="+", help="Filter the information to the specified game IDs")
     exclusive_print_group_02.add_argument("-gname", dest="name_print", metavar="GNAME", help="Filter the information to the specified game name")
     exclusive_print_group_01.add_argument("-mm", "--monthly", dest="print_monthly", action="store_true", help="Total time spent on each game as a total per month")
-    parser_print.add_argument("-t", "--total", dest="print_total", action="store_true", help="Total time spent on each game. No constraint can be applied when adopting this flag")
+    parser_print.add_argument("-t", "--total", dest="print_total", action="store_true", help="Total time spent on each game")
     parser_print.add_argument("-v", "--verbose", dest="print_verbose", action="store_true", help="Print additional information about each game. When adopting this flag, no total time is computed")
 
     # Remove options
@@ -202,6 +203,11 @@ def parse_arguments(params):
         if res["mode"] == "print" and res["print_total"] and (res["date_print_default"] or res["print_daily"] or res["print_monthly"]):
             print("usage: " + print_usage)
             print("error: " + app_name + " print: error: argument -t/--total: not allowed with argument -d/--date or -dd/--daily or -mm/--monthly")
+            exit(-1)
+
+        if res["mode"] == "print" and res["print_verbose"] and (res["print_daily"] or res["print_monthly"]):
+            print("usage: " + print_usage)
+            print("error: " + app_name + " print: error: argument -v/--verbose: not allowed with argument -dd/--daily or -mm/--monthly")
             exit(-1)
 
     except argparse.ArgumentTypeError as e:
