@@ -29,38 +29,49 @@ def insert_from_cli(connection, cursor):
     err = None
     flag_mult = 0
     flag_plat = 0
+    flag_list = []
+    flag_values = []
+
+    # Get the flag list to allow inserting the additional flag's values
+    flag_query = """ SELECT id, name
+                     FROM Flag 
+                     ORDER BY id ASC """
+
+    cursor.execute(flag_query)
+    flag_list = cursor.fetchall()
 
     # Take data from CLI input
     print("Provide the game's information to store")
     display_name = input("Name to be displayed: ").strip()
     exec_name = input("Name of the executable: ").strip()
-    status = input("(opt) Status of the game: ").strip()
-    mult = input("(opt) Multiplayer game (y/n): ").strip().lower()
-    plat = input("(opt) Platinum obtained (y/n): ").strip().lower()
+
+    for i in range(len(flag_list)):
+        value = 0
+        flag = flag_list[i] 
+
+        value = input("(opt) Value for " + flag[1] + " flag (y/n): ").strip().lower()
+        if len(value) == 1 and (value == "y" or value == "1"):
+            flag_values.append(1)
+        else:
+            flag_values.append(0)
 
     if display_name == "" or exec_name == "":
         err = "ERROR: display name and executable name have to be defined!"
         return err
-
-    if mult == "y":
-        flag_mult = 1
-
-    if plat == "y":
-        flag_plat = 1
 
     # Check if entry already exist, based on the executable name, since it theoretically cannot change
     # In case it exists, UPDATE the row, otherwise INSERT a new row
     sel_data = (exec_name, )
     sel_query = """ SELECT COUNT(*) FROM Game WHERE executable_name = ? """
 
-    u_data = (display_name, status, flag_mult, flag_plat, exec_name)
-    u_query = """ UPDATE Game 
-                SET display_name = ?, status = ?, is_multiplayer = ?, has_platinum = ? 
-                WHERE executable_name = ? """
+    u_data = (display_name, exec_name)
+    u_query = """ UPDATE Game
+                  SET display_name = ?
+                  WHERE executable_name = ? """
 
-    i_data = (display_name, exec_name, status, flag_mult, flag_plat)
-    i_query = """ INSERT INTO Game (display_name, executable_name, status, is_multiplayer, has_platinum)
-                VALUES (?, ?, ?, ?, ?) """
+    i_data = (display_name, exec_name)
+    i_query = """ INSERT INTO Game (display_name, executable_name)
+                  VALUES (?, ?) """
 
     cursor.execute(sel_query, sel_data)
     if cursor.fetchone()[0] > 0:
@@ -69,10 +80,42 @@ def insert_from_cli(connection, cursor):
 
         if ans == "y":
             cursor.execute(u_query, u_data)
-
     else:
         cursor.execute(i_query, i_data)
 
+    connection.commit()
+
+    # Retrieve the game ID and insert the flag values inside the HasFlag table
+    s_data = (exec_name, )
+    s_query = """ SELECT id
+                  FROM Game
+                  WHERE executable_name = ? """
+    
+    cursor.execute(s_query, s_data)
+    gid = cursor.fetchall()[0][0]
+
+    sel_query = """ SELECT COUNT(*) 
+                    FROM HasFlag 
+                    WHERE game_id = ? AND flag_id = ? """
+
+    u_query = """ UPDATE HasFlag
+                  SET value = ?
+                  WHERE game_id = ? AND flag_id = ? """
+
+    i_query = """INSERT INTO HasFlag (game_id, flag_id, value)
+                 VALUES (?, ?, ?) """
+    
+    for i in range(len(flag_list)):
+        sel_data = (gid, flag_list[i][0])
+        u_data = (flag_values[i], gid, flag_list[i][0])
+        i_data = (gid, flag_list[i][0], flag_values[i])
+
+        cursor.execute(sel_query, sel_data)
+        if cursor.fetchone()[0] > 0 and ans == "y":
+            cursor.execute(u_query, u_data)  
+        else:
+            cursor.execute(i_query, i_data)
+    
     connection.commit()
     return err
 
@@ -462,8 +505,8 @@ def open_template_file(file_name, sel_type):
 def create_game_template(file_name):
 
     fields = list(utils.FIELDNAMES)    
-    rows = [{fields[0]: "Lethal company", fields[1]: "Lethal Company.exe", fields[2]: "A", fields[3]: "Y", fields[4]: "N"},
-            {fields[0]: "Rocket League", fields[1]: "RocketLeague.exe", fields[2]: "F", fields[3]: "Y", fields[4]: "Y"}]
+    rows = [{fields[0]: "Lethal company", fields[1]: "Lethal Company.exe"},
+            {fields[0]: "Rocket League", fields[1]: "RocketLeague.exe"}]
 
     writer = csv.DictWriter(file_name, fieldnames=fields)
     writer.writeheader()
