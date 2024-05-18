@@ -156,7 +156,7 @@ def parse_arguments(params):
 
     # Filter options
     parser_config = subparser.add_parser(utils.ProgramModes.FILTER.value, help="Configure flags for filtering added games. These can only assume true/false values")
-    exclusive_config_group = parser_config.add_mutually_exclusive_group()
+    exclusive_config_group = parser_config.add_mutually_exclusive_group(required=True)
     exclusive_config_group.add_argument("--add", dest="filter_add", metavar="FLAG_NAME", help="Add a new flag")
     exclusive_config_group.add_argument("--list", dest="filter_list", action="store_true", help="List all flags")
     exclusive_config_group.add_argument("--rm", dest="filter_rm", metavar="FLAG_ID", type=int, help="Remove a flag based on its ID")
@@ -173,6 +173,7 @@ def parse_arguments(params):
     exclusive_print_group_02.add_argument("-gid", dest="id_print", type=int, metavar="GID", nargs="+", help="Filter the information to the specified game IDs")
     exclusive_print_group_02.add_argument("-gname", dest="name_print", metavar="GNAME", help="Filter the information to the specified game name")
     exclusive_print_group_01.add_argument("-mm", "--monthly", dest="print_monthly", action="store_true", help="Total time spent on each game as a total per month")
+    parser_print.add_argument("-s", "--sort-by", dest="print_sort", default="playtime", choices=["name", "first_played", "last_played", "playtime"], help="Order the games based on the alphabetic order, play order (first or last played) or total playtime (default)")
     parser_print.add_argument("-t", "--total", dest="print_total", action="store_true", help="Total time spent on each game")
     parser_print.add_argument("-v", "--verbose", dest="print_verbose", action="store_true", help="Print additional information about each game. When adopting this flag, no total time is computed")
 

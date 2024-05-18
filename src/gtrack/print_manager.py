@@ -36,6 +36,7 @@ def print_query_definition(args, flist):
     filter_flag = args["filter_print"]
     gids = args["id_print"]
     gname = args["name_print"]
+    order = args["print_sort"]
 
     temp_conditions = ""
     print_query = ""
@@ -54,6 +55,14 @@ def print_query_definition(args, flist):
     elif flag_monthly:
         print_query += "strftime('%Y-%m', Activity.date) as rel_month, "
         headers += ["month"]
+
+    # When the order selected is first or last played, add the MIN or MAX values for the date only when the query 
+    # acts as a subquery. Otherwise, use the formulas inside the ORDER BY clause. This assures to avoid unwanted data as part of the output.
+    if filter_flag:
+        if order == "first_played":
+            print_query += "MIN(strftime('%Y-%m-%d', Activity.date)) as first_played, "
+        elif order == "last_played":
+            print_query += "MAX(strftime('%Y-%m-%d', Activity.date)) as last_played, "
 
     print_query += "SUM(Activity.playtime) as total_playtime "
     headers += ["playtime (HH:MM:SS)"]
@@ -105,15 +114,6 @@ def print_query_definition(args, flist):
     elif flag_monthly:
         print_query += ", rel_month "
 
-    # ORDER BY
-    print_query += "ORDER BY "
-
-    if flag_daily:
-        print_query += "rel_day DESC, "
-    elif flag_monthly:
-        print_query += "rel_month DESC, "
-
-    print_query += "total_playtime DESC"
 
     # VERBOSE or FILTERS: use the defined query as a subquery and create the outer query
     if flag_verbose or filter_flag:
@@ -203,7 +203,32 @@ def print_query_definition(args, flist):
             if flag_daily or flag_monthly:
                 print_query += print_date[2:] + "DESC, "
 
+            if order == "playtime":
+                print_query += "total_playtime DESC"
+            elif order == "name":
+                print_query += "Game.display_name ASC"
+            elif order == "first_played":
+                print_query += "SUB.first_played ASC"
+            elif order == "last_played":
+                print_query += "SUB.last_played DESC"
+    else:
+        # ORDER BY: useless to order the query if it acts as a subquery
+        # Do it when it's sure how it's used
+        print_query += "ORDER BY "
+
+        if flag_daily:
+            print_query += "rel_day DESC, "
+        elif flag_monthly:
+            print_query += "rel_month DESC, "
+
+        if order == "playtime":
             print_query += "total_playtime DESC"
+        elif order == "name":
+            print_query += "Game.display_name ASC"
+        elif order == "first_played":
+            print_query += "MIN(strftime('%Y-%m-%d', Activity.date)) ASC"
+        elif order == "last_played":
+            print_query += "MAX(strftime('%Y-%m-%d', Activity.date)) DESC"
     
     return [print_query, query_args, headers]
 
