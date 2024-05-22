@@ -60,7 +60,5 @@ $ python3 -m gtrack.gtrack print -gid GAME_ID -d START_DATE [END_DATE]
 ```
 
 ## To-Do
-- [x] ~~Add a `remove` option for games (currently, deleting and recreating the database is the only way to remove unwanted processes);~~
-- [x] ~~Add more meaningful flags for games (for better filtering/plotting);~~
-- [x] ~~Allow more print options;~~
-- [ ] Plotting for statistics.
+- [ ] More flexible use of filters (AND/OR-TRUE/FALSE);
+- [ ] Add plot creation for generating statistics.
