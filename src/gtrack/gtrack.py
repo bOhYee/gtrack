@@ -172,8 +172,10 @@ def parse_arguments(params):
     parser_print.add_argument("-f", "--filter", dest="filter_print", type=int, metavar="FLAG_ID", nargs="+", help="Filter through the custom-defined flags")
     exclusive_print_group_02.add_argument("-gid", dest="id_print", type=int, metavar="GID", nargs="+", help="Filter the information to the specified game IDs")
     exclusive_print_group_02.add_argument("-gname", dest="name_print", metavar="GNAME", help="Filter the information to the specified game name")
+    parser_print.add_argument("--mean", dest="print_mean", action="store_true", help="Compute the mean time spent on playing with respect to the current year. Can be grouped with other filters.")
     exclusive_print_group_01.add_argument("-mm", "--monthly", dest="print_monthly", action="store_true", help="Total time spent on each game as a total per month")
     parser_print.add_argument("-s", "--sort-by", dest="print_sort", default="playtime", choices=["name", "first_played", "last_played", "playtime"], help="Order the games based on the alphabetic order, play order (first or last played) or total playtime (default)")
+    parser_print.add_argument("--sum", dest="print_sum", action="store_true", help="Compute the total time between all games stored inside the database for the current year. Can be grouped with other filters.")
     parser_print.add_argument("-t", "--total", dest="print_total", action="store_true", help="Total time spent on each game")
     parser_print.add_argument("-v", "--verbose", dest="print_verbose", action="store_true", help="Print additional information about each game. When adopting this flag, no total time is computed")
 
@@ -209,6 +211,11 @@ def parse_arguments(params):
         if res["mode"] == "print" and res["print_verbose"] and (res["print_daily"] or res["print_monthly"]):
             print("usage: " + print_usage)
             print("error: " + app_name + " print: error: argument -v/--verbose: not allowed with argument -dd/--daily or -mm/--monthly")
+            exit(-1)
+
+        if res["mode"] == "print" and res["print_verbose"] and (res["print_sum"] or res["print_mean"]):
+            print("usage: " + print_usage)
+            print("error: " + app_name + " print: error: argument -v/--verbose: not allowed with argument --sum or --mean")
             exit(-1)
 
     except argparse.ArgumentTypeError as e:

@@ -5,8 +5,25 @@ from gtrack import utils
 
 # Interpretation layer for the PRINT mode
 def print_data(parsed_args, connection, cursor):
+    mean_days = None
     flag_list = []
     group_dates = parsed_args["print_daily"] or parsed_args["print_monthly"]
+    
+    # Need to compute amount of days for the elaboration of the mean
+    if parsed_args["print_mean"]:
+        if parsed_args["date_print_default"] is None:
+            mean_days = float(datetime.today().strftime("%j").lstrip("0")) + 1
+        elif len(parsed_args["date_print_default"]) == 1:
+            sdate = parsed_args["date_print_default"][0]
+            sdate = float(sdate.strftime("%j").lstrip("0")) - 1
+            edate = float(datetime.today().strftime("%j").lstrip("0"))
+            mean_days = edate - sdate
+        else:
+            sdate = parsed_args["date_print_default"][0]
+            sdate = float(sdate.strftime("%j").lstrip("0")) - 1
+            edate = parsed_args["date_print_default"][1]
+            edate = float(edate.strftime("%j").lstrip("0"))
+            mean_days = edate - sdate
 
     # Headers for the flag columns
     if parsed_args["print_verbose"]:
@@ -23,14 +40,16 @@ def print_data(parsed_args, connection, cursor):
         cursor.execute(query)
 
     info = cursor.fetchall()
-    print_data_cli(headers=headers, rows=info, flag_verbose=parsed_args["print_verbose"], group_dates=group_dates)
+    print_data_cli(headers=headers, rows=info, flag_verbose=parsed_args["print_verbose"], mean_days=mean_days, group_dates=group_dates)
 
 
 # Query defintion for recovering data from the DB
 def print_query_definition(args, flist):
     flag_verbose = args["print_verbose"]
     flag_daily = args["print_daily"]
+    flag_mean = args["print_mean"]
     flag_monthly = args["print_monthly"]
+    flag_sum = args["print_sum"]
     flag_total = args["print_total"]
     dates = args["date_print_default"]
     filter_flag = args["filter_print"]
@@ -41,6 +60,7 @@ def print_query_definition(args, flist):
     temp_conditions = ""
     print_query = ""
     print_subquery = ""
+    print_filters_sub = ""
     query_args = None
     headers = ["game_id", "game_name"]
 
@@ -115,8 +135,55 @@ def print_query_definition(args, flist):
         print_query += ", rel_month "
 
 
-    # VERBOSE or FILTERS: use the defined query as a subquery and create the outer query
-    if flag_verbose or filter_flag:
+    # SUM, MEAN, VERBOSE or FILTERS: use the defined query as a subquery and create the outer query
+    if flag_sum or flag_mean:
+        print_subquery = print_query
+        print_filters_sub = ""
+
+        # Headers
+        if flag_sum:
+            headers = ["Total time"]
+        else:
+            headers = ["Mean time per day"]
+        
+        # Manage filters
+        if filter_flag:
+            temp_conditions = ""
+            for i in range(len(filter_flag)):
+                fid = filter_flag[i]
+                temp_conditions += "(HasFlag.flag_id == " + str(fid) + " AND HasFlag.value == 1) "
+                if i < len(filter_flag) - 1:
+                    temp_conditions += "OR "
+
+            print_query += "AND (" + temp_conditions + ") "
+            print_filters_sub = """SELECT HasFlag.game_id 
+                                   FROM HasFlag
+                                   WHERE (""" + temp_conditions + """) 
+                                   GROUP BY HasFlag.game_id """
+
+        print_query = """SELECT SUM(SUB.total_playtime)
+                         FROM Game INNER JOIN (""" + print_subquery + """) as SUB ON Game.id == SUB.id 
+                         WHERE Game.id > 0 """
+        
+        if filter_flag:
+            print_query += "AND Game.id IN (" + print_filters_sub +") "
+
+        # Manage game IDs
+        if gids:
+            temp_conditions = ""
+            for i in range(len(gids)):
+                temp_conditions += "Game.id == " + str(gids[i]) + " "
+
+                if i < len(gids) - 1:
+                    temp_conditions += "OR "
+
+            print_query += "AND (" + temp_conditions + ") "
+
+        # Manage game name search
+        if gname:
+            print_query += "AND Game.display_name LIKE '%" + gname + "%' "
+    
+    elif flag_verbose or filter_flag:
         print_subquery = print_query
         print_sq_filters = ""
         print_date = ""
@@ -173,6 +240,7 @@ def print_query_definition(args, flist):
                              FROM Game INNER JOIN (""" + print_subquery + """) as SUB ON Game.id == SUB.id 
                                        INNER JOIN HasFlag ON Game.id == HasFlag.game_id """
             
+            # Manage filters
             print_query += "WHERE "
             for i in range(len(filter_flag)):
                 fid = filter_flag[i]
@@ -211,6 +279,7 @@ def print_query_definition(args, flist):
                 print_query += "SUB.first_played ASC"
             elif order == "last_played":
                 print_query += "SUB.last_played DESC"
+
     else:
         # ORDER BY: useless to order the query if it acts as a subquery
         # Do it when it's sure how it's used
@@ -234,7 +303,7 @@ def print_query_definition(args, flist):
 
 
 # Table printing on CLI
-def print_data_cli(headers, rows, flag_verbose, group_dates):
+def print_data_cli(headers, rows, flag_verbose, mean_days, group_dates):
     ins_barriers = 0
     barriers = []
     print_rows = []
@@ -272,6 +341,10 @@ def print_data_cli(headers, rows, flag_verbose, group_dates):
         tmp_tuple = list(print_rows[i])
         if tmp_tuple[-1] is None:
             continue
+        
+        # Compute mean in case it is requested, based on how many days passed since the start of the year
+        if mean_days is not None:
+            tmp_tuple[-1] /= mean_days
 
         min, sec = divmod(tmp_tuple[-1], 60)
         h, min = divmod(min, 60)
