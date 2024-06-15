@@ -1,7 +1,6 @@
-# Avoid tracking tmp and data folder
-tmp/*
-data/*
-
-# Do not track tool config files
-.idea/*
-*/__pycache__/*
+**/__pycache__/*
+**/.idea
+**/build
+**/tmp
+**/tmp*
+**/*egg*

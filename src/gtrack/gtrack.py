@@ -1,11 +1,10 @@
 import sys
 import argparse
 import sqlite3
-import configparser
 
 from datetime import datetime
-from pathlib import Path
 from gtrack import utils
+from gtrack.config_manager import read_config_file
 from gtrack.filter_manager import config_flags, scan_flags
 from gtrack.insert_manager import insert_data, scan_data, remove_data
 from gtrack.print_manager import print_data
@@ -16,10 +15,11 @@ def main():
     dbpath = None
     filters = None
 
-    # Read config file to know the DB location
+    # Read configuration file for integrating custom properties
     configs = read_config_file()
     dbpath = configs["Paths"]
     filters = configs["Filters"]
+    bucket_options = configs["BucketOptions"]
 
     # Connect to the sqlite3 database and check for the existance of the tables
     # When the database is not found in the indicated directory, it is created
@@ -43,7 +43,7 @@ def main():
             exit(-1)
     
     elif parsed_args["mode"] == utils.ProgramModes.INSERT.value:
-        res = insert_data(parsed_args, connection, cursor)
+        res = insert_data(parsed_args, bucket_options, connection, cursor)
         if res is not None:
             print(res)
             exit(-1)
@@ -56,47 +56,13 @@ def main():
 
     elif parsed_args["mode"] == utils.ProgramModes.SCAN.value:
         scan_flags(filters[0], connection, cursor)
-        res = scan_data((dbpath[1], dbpath[2]), connection, cursor)
+        res = scan_data((dbpath[1], dbpath[2]), bucket_options, connection, cursor)
         if res is not None:
             print(res)
             exit(-1)
 
     # Close connection
     connection.close()
-
-
-# Read configuration file
-def read_config_file():
-    res = {}
-    path_data_game = None
-    path_data_bucket = None
-    flag_list = None
-    config = configparser.ConfigParser()
-
-    try:
-        # Path where the config is supposed to be located is $HOME/.gtrack/config.ini
-        config.read_file(open(Path.home() / ".gtrack" / "config.ini"))
-        paths = config["Paths"]
-
-        path_data_game = str(paths["path_data_game"]) if "path_data_game" in paths else None
-        path_data_bucket = str(paths["path_data_bucket"]) if "path_data_bucket" in paths else None
-        res["Paths"] = (str(paths["path_db"]), path_data_game, path_data_bucket)
-
-        # Filters is optional
-        if "Filters" in config:
-            flags = config["Filters"]
-            flag_list = str(flags["flag_list"]) if "flag_list" in flags else None
-            res["Filters"] = (flag_list, )
- 
-    except OSError:
-        print("ERROR: configuration file could not be found")
-        exit(-1)
-
-    except KeyError as ke:
-        print("ERROR: missing key-value pair " + str(ke))
-        exit(-1)
-
-    return res
 
 
 # Creates the tables 'game' and 'activity' inside the database if they aren't alread present

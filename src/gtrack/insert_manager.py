@@ -9,7 +9,7 @@ from gtrack import utils
 
 
 # Interpretation layer for the INSERT mode
-def insert_data(parsed_args, connection, cursor):
+def insert_data(parsed_args, bucket_options, connection, cursor):
     err = None
 
     if parsed_args["insert_manual_flag"] == 1:
@@ -19,7 +19,7 @@ def insert_data(parsed_args, connection, cursor):
         err = create_template_file(parsed_args)
 
     else:
-        err = insert_from_file(parsed_args, connection, cursor)
+        err = insert_from_file(parsed_args, bucket_options, connection, cursor)
 
     return err
 
@@ -121,7 +121,7 @@ def insert_from_cli(connection, cursor):
 
 # Determine which method has to be launched for reading file
 # Additional controls for eventual errors during execution
-def insert_from_file(parsed_args, connection, cursor):
+def insert_from_file(parsed_args, bucket_options, connection, cursor):
     err = None
     
     # Check if user indicated a simple file or a directory of source files
@@ -145,23 +145,23 @@ def insert_from_file(parsed_args, connection, cursor):
             # Game
             if parsed_args["insert_choice"] == "game" and file_name.lower().endswith(".csv"):
                 file = parsed_args["insert_filepath"] + str(file_name)
-                open_data_file(file, 0, parsed_args["header_flag"], None, connection, cursor)
+                open_data_file(file, 0, parsed_args["header_flag"], None, None, connection, cursor)
 
             # Activity
             elif parsed_args["insert_choice"] == "bucket" and file_name.lower().endswith(".json"):
                 file = parsed_args["insert_filepath"] + str(file_name)
-                open_data_file(file, 1, None, games, connection, cursor)
+                open_data_file(file, 1, None, games, bucket_options, connection, cursor)
 
         print("Insertion complete!")
 
     elif is_path == 1:
         # Game
         if parsed_args["insert_choice"] == "game" and parsed_args["insert_filepath"].lower().endswith(".csv"):
-            open_data_file(parsed_args["insert_filepath"], 0, parsed_args["header_flag"], None, connection, cursor)
+            open_data_file(parsed_args["insert_filepath"], 0, parsed_args["header_flag"], None, None, connection, cursor)
 
         # Activity
         elif parsed_args["insert_choice"] == "bucket" and parsed_args["insert_filepath"].lower().endswith(".json"):
-            open_data_file(parsed_args["insert_filepath"], 1, None, games, connection, cursor)
+            open_data_file(parsed_args["insert_filepath"], 1, None, games, bucket_options, connection, cursor)
 
         # Error
         else:
@@ -174,7 +174,7 @@ def insert_from_file(parsed_args, connection, cursor):
 
 
 # Checks for possible errors while opening the file and launches the correct module
-def open_data_file(file_name, file_type, header_flag, game_list, connection, cursor):
+def open_data_file(file_name, file_type, header_flag, game_list, bucket_options, connection, cursor):
     try:
         input_file = open(file_name)
     except OSError:
@@ -186,7 +186,7 @@ def open_data_file(file_name, file_type, header_flag, game_list, connection, cur
         if file_type == 0:
             read_game_data_csv(input_file, header_flag, connection, cursor)
         else:
-            read_bucket_data_json(input_file, game_list, connection, cursor)
+            read_bucket_data_json(input_file, game_list, bucket_options, connection, cursor)
 
     return 0
 
@@ -311,7 +311,7 @@ def read_game_data_csv(input_stream, header_flag, connection, cursor):
 
 
 # Read the list of activities from the buckets produced by ActivityWatch and add them to the sql database
-def read_bucket_data_json(input_stream, games, connection, cursor):
+def read_bucket_data_json(input_stream, games, options, connection, cursor):
     act_event_counter = 0
     uthres_counter = 0
     dup_counter = 0
@@ -320,7 +320,7 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
     prev_end_time = 0
     datetime_event_format = "%Y-%m-%dT%H:%M:%S.%f%z"
     datetime_event_nomicro_format = "%Y-%m-%dT%H:%M:%S%z"
-    different_activities_threshold = timedelta(seconds=utils.DIFF_ACT_THRESHOLD)
+    different_activities_threshold = timedelta(seconds=options["diff_thres"])
 
     try: 
         data = json.load(input_stream)
@@ -375,7 +375,7 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
         # discrepancy between the two start times. Store the past one and start collecting
         # information on the new data
         elif a_ins["game_id"] != event["game_id"] or ((event["datetime"] - prev_end_time) > different_activities_threshold):
-            ins_res = insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor)
+            ins_res = insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], options["save_thres"], cursor)
             if ins_res == 1:
                 uthres_counter += act_event_counter
             elif ins_res == 2:
@@ -392,7 +392,7 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
 
         # Last element has to be saved no matter what it is
         if i == len(activities) - 1:
-            ins_res = insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], cursor)
+            ins_res = insert_activity(a_ins["game_id"], a_ins["datetime"], a_ins["playtime"], options["save_thres"], cursor)
             if ins_res == 1:
                 uthres_counter += act_event_counter
             elif ins_res == 2:
@@ -411,13 +411,13 @@ def read_bucket_data_json(input_stream, games, connection, cursor):
 
 
 # Inserts an activity, pre-elaborated from the bucket, inside the table
-def insert_activity(gid, dt, playtime, cursor):
+def insert_activity(gid, dt, playtime, save_threshold, cursor):
 
     playtime = round(playtime, 3)
 
     # Playtime should be above a certain threshold
     # In this way, meaningless events are avoided and not taken into account for the counts
-    if playtime <= utils.SAVE_ACT_THRESHOLD:
+    if playtime <= save_threshold:
         return 1
 
     # Verify that the data doesn't exist
@@ -547,13 +547,13 @@ def create_bucket_template(file_name):
 
 
 # Preparation layer for the SCAN mode
-def scan_data(paths, connection, cursor):
+def scan_data(paths, bucket_options, connection, cursor):
     err = None
     pargs = {}
 
     # No path indicated
     if paths[0] is None and paths[1] is None:
-        print("The configuration file does not specify a path. The operation will be terminated.")
+        print("The configuration file does not specify any path. The operation will be terminated.")
         return
 
     # Insert games first
@@ -562,7 +562,7 @@ def scan_data(paths, connection, cursor):
         pargs["insert_filepath"] = paths[0]
         pargs["insert_choice"] = "game"
         pargs["header_flag"] = 0
-        err = insert_from_file(pargs, connection, cursor)
+        err = insert_from_file(pargs, None, connection, cursor)
         if err:
             return err
         
@@ -574,7 +574,7 @@ def scan_data(paths, connection, cursor):
         pargs["insert_filepath"] = paths[1]
         pargs["insert_choice"] = "bucket"
         print("Scanning bucket folder: " + paths[1])
-        err = insert_from_file(pargs, connection, cursor)
+        err = insert_from_file(pargs, bucket_options, connection, cursor)
 
     return err
 

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project]
+name = "gtrack"
+version = "0.1.0"
+description = "A simple Python program to parse ActivityWatch data for keeping track of time spent on games"
+readme = "README.md"
+
+keywords = [
+    "game",
+    "tracker",
+    "ActivityWatch"
+]
+dependencies = [
+    "matplotlib>=3.8.3",
+    "platformdirs>=4.2.2",
+    "tabulate>=0.9.0",
+]
+authors = [
+    {name = "Matteo Isoldi"}
+]
+license = { file = "LICENSE" }
+
+[project.scripts]
+gtrack = "gtrack.gtrack:main"
+
+[project.urls]
+Repository = "https://github.com/bOhYee/gtrack"

@@ -1,15 +1,14 @@
 import argparse
+import platformdirs
 from enum import Enum
 
-# Database default location path
-DB_PATH = "../data/project.db"
+# Paths for the application (platform-dependent)
+CONFIG_PATH = platformdirs.user_config_dir("gtrack", ensure_exists=True)    # Configuration file
+DB_PATH = platformdirs.user_data_dir("gtrack", ensure_exists=True)          # Database default (CONFIGURABLE)
 
-# Time threshold for saving an activity inside the DB
-SAVE_ACT_THRESHOLD = 3 * 60
-
-# Time threshold for identifying different gaming sessions
-# Value is in SECONDS for better scalability
-DIFF_ACT_THRESHOLD = 30 * 60
+# Time thresholds (in SECONDS)
+SAVE_ACT_THRESHOLD = 3 * 60                     # Used to filter relevant activities (CONFIGURABLE)
+DIFF_ACT_THRESHOLD = 30 * 60                    # Used to identify different gaming sessions (CONFIGURABLE)
 
 # Field names of the CSV file for the game table
 FIELDNAMES = ("display_name", "executable_name")
