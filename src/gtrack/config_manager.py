@@ -12,6 +12,18 @@ def read_config_file():
     bucket_options = {}
     bucket_options["save_thres"] = utils.SAVE_ACT_THRESHOLD
     bucket_options["diff_thres"] = utils.DIFF_ACT_THRESHOLD
+
+    pot_options = {}
+    pot_options["bar"] = utils.BAR_FONT_SIZE
+    pot_options["xtitle"] = utils.LABEL_FONT_SIZE
+    pot_options["xlabel"] = utils.TITLE_FONT_SIZE
+    pot_options["ytitle"] = utils.LABEL_FONT_SIZE
+    pot_options["ylabel"] = utils.TITLE_FONT_SIZE
+    mean_over_time_options = {}
+    mean_over_time_options["xlabel"] = utils.TITLE_FONT_SIZE
+    mean_over_time_options["ytitle"] = utils.LABEL_FONT_SIZE
+    mean_over_time_options["ylabel"] = utils.TITLE_FONT_SIZE
+
     res = {}
 
     try:
@@ -34,13 +46,33 @@ def read_config_file():
             flags = config["filters"]
             flag_list = str(flags["flag_list"]) if "flag_list" in flags else None
 
+        if "plot:PoT" in config:
+            poptions = config["plot:PoT"]
+
+            pot_options["xtitle"] = int(poptions["xtitle_font_size"]) if "xtitle_font_size" in poptions else utils.TITLE_FONT_SIZE
+            pot_options["xlabel"] = int(poptions["xlabel_font_size"]) if "xlabel_font_size" in poptions else utils.LABEL_FONT_SIZE
+            pot_options["ytitle"] = int(poptions["ytitle_font_size"]) if "ytitle_font_size" in poptions else utils.TITLE_FONT_SIZE
+            pot_options["ylabel"] = int(poptions["ylabel_font_size"]) if "ylabel_font_size" in poptions else utils.LABEL_FONT_SIZE
+            pot_options["bar"]    = int(poptions["bartext_font_size"]) if "bartext_font_size" in poptions else utils.BAR_FONT_SIZE
+
+        if "plot:MHoT" in config:
+            mhotoptions = config["plot:MHoT"]
+
+            mean_over_time_options["xlabel"] = int(mhotoptions["xlabel_font_size"]) if "xlabel_font_size" in mhotoptions else utils.LABEL_FONT_SIZE
+            mean_over_time_options["ytitle"] = int(mhotoptions["ytitle_font_size"]) if "ytitle_font_size" in mhotoptions else utils.TITLE_FONT_SIZE
+            mean_over_time_options["ylabel"] = int(mhotoptions["ylabel_font_size"]) if "ylabel_font_size" in mhotoptions else utils.LABEL_FONT_SIZE
+
         res["Paths"] = (path_db, path_data_game, path_data_bucket)
         res["Filters"] = (flag_list, )
         res["BucketOptions"] = bucket_options
+        res["PoT"] = pot_options
+        res["MHoT"] = mean_over_time_options
 
     except OSError:
         res["Paths"] = (path_db, None, None)
         res["Filters"] = (None, )
         res["BucketOptions"] = bucket_options
+        res["PoT"] = pot_options
+        res["MHoT"] = mean_over_time_options
 
     return res

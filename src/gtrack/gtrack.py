@@ -7,6 +7,7 @@ from gtrack import utils
 from gtrack.config_manager import read_config_file
 from gtrack.filter_manager import config_flags, scan_flags
 from gtrack.insert_manager import insert_data, scan_data, remove_data
+from gtrack.plot_manager import plot_data
 from gtrack.print_manager import print_data
 
 # Main program
@@ -14,12 +15,15 @@ def main():
     res = None
     dbpath = None
     filters = None
+    plot_options = {}
 
     # Read configuration file for integrating custom properties
     configs = read_config_file()
     dbpath = configs["Paths"]
     filters = configs["Filters"]
     bucket_options = configs["BucketOptions"]
+    plot_options["PoT"] = configs["PoT"]
+    plot_options["MHoT"] = configs["MHoT"]
 
     # Connect to the sqlite3 database and check for the existance of the tables
     # When the database is not found in the indicated directory, it is created
@@ -47,6 +51,9 @@ def main():
         if res is not None:
             print(res)
             exit(-1)
+
+    elif parsed_args["mode"] == utils.ProgramModes.PLOT.value:
+        plot_data(parsed_args, plot_options, connection, cursor)
     
     elif parsed_args["mode"] == utils.ProgramModes.PRINT.value:
         print_data(parsed_args, connection, cursor)
@@ -118,7 +125,7 @@ def parse_arguments(params):
     exclusive_group.add_argument("-f", "--file", dest="insert_filepath", metavar="FILE", help="File to read from or directory containing source files")
     exclusive_group.add_argument("-m", "--manual", dest="insert_manual_flag", action="store_true", help="Manual insertion of game's data")
     parser_ins.add_argument("--no-header", dest="header_flag", action="store_true", help="Don't skip any line while parsing the .csv file")
-    parser_ins.add_argument("-t", "--type", dest="insert_choice", metavar="TYPE", choices=["game", "bucket"], help="Data type to insert between ['game' | 'bucket']", required=True)
+    parser_ins.add_argument("-t", "--type", dest="insert_choice", metavar="TYPE", type=str.lower, choices=["game", "bucket"], help="Data type to insert between ['game' | 'bucket']", required=True)
 
     # Filter options
     parser_config = subparser.add_parser(utils.ProgramModes.FILTER.value, help="Configure flags for filtering added games. These can only assume true/false values")
@@ -126,6 +133,15 @@ def parse_arguments(params):
     exclusive_config_group.add_argument("--add", dest="filter_add", metavar="FLAG_NAME", help="Add a new flag")
     exclusive_config_group.add_argument("--list", dest="filter_list", action="store_true", help="List all flags")
     exclusive_config_group.add_argument("--rm", dest="filter_rm", metavar="FLAG_ID", type=int, help="Remove a flag based on its ID")
+
+    # Plot options
+    plot_usage = app_name + " plot -t TYPE [-h] [-s PATH] [-cf FILTER_BASE_EXPR] [-f [FILTER_EXPR ...]] [-t | -d SDATE [EDATE]]"
+    parser_plot = subparser.add_parser(utils.ProgramModes.PLOT.value, usage=plot_usage, help="Plot the recorded data")
+    parser_plot.add_argument("-cf", "--color-by-filter", dest="color_filter_plot", type=str, metavar="FILTER_BASE_EXPR", action=utils.SimpleFilterProcessor, help="Highlight a part of the PoT graph based on the specified filter expression (only one flag ID is supported, as well as the NOT operator)")
+    parser_plot.add_argument("-d", "--date", dest="date_plot_default", metavar="DATE", nargs="+", action=utils.DateProcessor, type=parse_date, help="Dates to constrain the information used by the plot")
+    parser_plot.add_argument("-f", "--filter", dest="filter_plot", type=str, metavar="FILTER_EXPR", action=utils.FilterProcessor, help="Filter through the custom-defined flags for limiting the information shown by the plot using a boolean expression with the filter IDs")
+    parser_plot.add_argument("-t", "--type", dest="plot_choice", metavar="TYPE", type=str.lower, choices=["pot", "mhot"], help="Type of plot to generate ['pot' (Playtime-over-Time) | 'mhot' (Mean-Hours-over-Time)]", required=True)
+    parser_plot.add_argument("-tot", "--total", dest="plot_total", action="store_true", help="Plot the overall recorded information")
 
     # Print options
     print_usage = app_name + " print [-h] [-v] [-t | [[-d SDATE [EDATE]] [-dd] [-mm]] [-gid [GID ...] | -gname GNAME]"
@@ -135,12 +151,12 @@ def parse_arguments(params):
 
     parser_print.add_argument("-d", "--date", dest="date_print_default", metavar="DATE", nargs="+", action=utils.DateProcessor, type=parse_date, help="Dates to constrain the search period")
     exclusive_print_group_01.add_argument("-dd", "--daily", dest="print_daily", action="store_true", help="Total time spent on each game as a total per day")
-    parser_print.add_argument("-f", "--filter", dest="filter_print", type=int, metavar="FLAG_ID", nargs="+", help="Filter through the custom-defined flags")
+    parser_print.add_argument("-f", "--filter", dest="filter_print", type=str, metavar="FILTER_EXPR", action=utils.FilterProcessor, help="Filter through the custom-defined flags using a boolean expression with filter IDs")
     exclusive_print_group_02.add_argument("-gid", dest="id_print", type=int, metavar="GID", nargs="+", help="Filter the information to the specified game IDs")
     exclusive_print_group_02.add_argument("-gname", dest="name_print", metavar="GNAME", help="Filter the information to the specified game name")
     parser_print.add_argument("--mean", dest="print_mean", action="store_true", help="Compute the mean time spent on playing with respect to the current year. Can be grouped with other filters.")
     exclusive_print_group_01.add_argument("-mm", "--monthly", dest="print_monthly", action="store_true", help="Total time spent on each game as a total per month")
-    parser_print.add_argument("-s", "--sort-by", dest="print_sort", default="playtime", choices=["name", "first_played", "last_played", "playtime"], help="Order the games based on the alphabetic order, play order (first or last played) or total playtime (default)")
+    parser_print.add_argument("-s", "--sort-by", dest="print_sort", default="playtime", type=str.lower, choices=["name", "first_played", "last_played", "playtime"], help="Order the games based on the alphabetic order, play order (first or last played) or total playtime (default)")
     parser_print.add_argument("--sum", dest="print_sum", action="store_true", help="Compute the total time between all games stored inside the database for the current year. Can be grouped with other filters.")
     parser_print.add_argument("-t", "--total", dest="print_total", action="store_true", help="Total time spent on each game")
     parser_print.add_argument("-v", "--verbose", dest="print_verbose", action="store_true", help="Print additional information about each game. When adopting this flag, no total time is computed")
@@ -169,6 +185,16 @@ def parse_arguments(params):
             print("error: " + app_name + " print: error: argument --create-template: not allowed with argument --no-header")
             exit(-1)
 
+        if res["mode"] == "plot" and res["plot_total"] and res["date_plot_default"]:
+            print("usage: " + plot_usage)
+            print("error: " + app_name + " plot: error: argument -t/--total: not allowed with argument -d/--date")
+            exit(-1)
+
+        if res["mode"] == "plot" and res["plot_choice"] == "mhot" and res["color_filter_plot"]:
+            print("usage: " + plot_usage)
+            print("error: " + app_name + " plot: error: argument -cf/--color-by-filter: not allowed with plot type 'mhot' (Mean-Hours-over-Time)")
+            exit(-1)
+            
         if res["mode"] == "print" and res["print_total"] and (res["date_print_default"] or res["print_daily"] or res["print_monthly"]):
             print("usage: " + print_usage)
             print("error: " + app_name + " print: error: argument -t/--total: not allowed with argument -d/--date or -dd/--daily or -mm/--monthly")

@@ -138,35 +138,20 @@ def print_query_definition(args, flist):
     # SUM, MEAN, VERBOSE or FILTERS: use the defined query as a subquery and create the outer query
     if flag_sum or flag_mean:
         print_subquery = print_query
-        print_filters_sub = ""
 
         # Headers
         if flag_sum:
             headers = ["Total time"]
         else:
             headers = ["Mean time per day"]
-        
-        # Manage filters
-        if filter_flag:
-            temp_conditions = ""
-            for i in range(len(filter_flag)):
-                fid = filter_flag[i]
-                temp_conditions += "(HasFlag.flag_id == " + str(fid) + " AND HasFlag.value == 1) "
-                if i < len(filter_flag) - 1:
-                    temp_conditions += "OR "
-
-            print_query += "AND (" + temp_conditions + ") "
-            print_filters_sub = """SELECT HasFlag.game_id 
-                                   FROM HasFlag
-                                   WHERE (""" + temp_conditions + """) 
-                                   GROUP BY HasFlag.game_id """
 
         print_query = """SELECT SUM(SUB.total_playtime)
                          FROM Game INNER JOIN (""" + print_subquery + """) as SUB ON Game.id == SUB.id 
                          WHERE Game.id > 0 """
         
+        # Manage filters
         if filter_flag:
-            print_query += "AND Game.id IN (" + print_filters_sub +") "
+            print_query += "AND " + utils.filter_recursive(filter_flag[0]) + " "
 
         # Manage game IDs
         if gids:
@@ -191,20 +176,14 @@ def print_query_definition(args, flist):
         if flag_verbose:
             headers = ["game_id", "game_name", "game_exe"] + flist + ["playtime"]
             if filter_flag:
-                print_sq_filters = """SELECT HasFlag.game_id 
-                                      FROM HasFlag 
-                                      WHERE """
-                
-                for i in range(len(filter_flag)):
-                    fid = filter_flag[i]
-                    print_sq_filters += "(HasFlag.flag_id == " + str(fid) + " AND HasFlag.value == 1) "
-                    if i < len(filter_flag) - 1:
-                        print_query += "OR "
+                print_sq_filters = """SELECT Game.id
+                                      FROM Game 
+                                      WHERE """ + utils.filter_recursive(filter_flag[0])
 
                 print_query = """SELECT Game.*, HasFlag.value, SUB.total_playtime 
                                  FROM Game LEFT JOIN (""" + print_subquery + """) as SUB ON Game.id == SUB.id 
-                                           INNER JOIN (""" + print_sq_filters + """) as SUBFILTERS ON Game.id == SUBFILTERS.game_id
-                                           INNER JOIN HasFlag ON SUBFILTERS.game_id == HasFlag.game_id """
+                                           INNER JOIN (""" + print_sq_filters + """) as SUBFILTERS ON Game.id == SUBFILTERS.id
+                                           INNER JOIN HasFlag ON SUBFILTERS.id == HasFlag.game_id """                
                 
             else:
                 print_query = """SELECT Game.*, HasFlag.value, SUB.total_playtime 
@@ -241,12 +220,7 @@ def print_query_definition(args, flist):
                                        INNER JOIN HasFlag ON Game.id == HasFlag.game_id """
             
             # Manage filters
-            print_query += "WHERE "
-            for i in range(len(filter_flag)):
-                fid = filter_flag[i]
-                print_query += "(HasFlag.flag_id == " + str(fid) + " AND HasFlag.value == 1) "
-                if i < len(filter_flag) - 1:
-                    print_query += "OR "    
+            print_query += "WHERE " + utils.filter_recursive(filter_flag[0]) + " "
 
             # Manage game IDs
             if gids:
@@ -298,7 +272,7 @@ def print_query_definition(args, flist):
             print_query += "MIN(strftime('%Y-%m-%d', Activity.date)) ASC"
         elif order == "last_played":
             print_query += "MAX(strftime('%Y-%m-%d', Activity.date)) DESC"
-    
+
     return [print_query, query_args, headers]
 
 
